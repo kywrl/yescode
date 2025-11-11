@@ -36,10 +36,10 @@ yc uninstall
 ## 命令说明
 
 - `yc balance` - 查询账户余额和订阅信息
-- `yc providers` - 查询可用的 AI 提供商
-- `yc provider-alternatives <id>` - 查询指定提供商提供的所有可用服务方案
-- `yc provider-selection <id>` - 查询指定提供商当前生效的服务方案
-- `yc set-provider-selection <id> <alt>` - 设置指定提供商的生效服务方案
+- `yc providers` - 查询可用提供商分组信息
+- `yc provider-alternatives <id>` - 查询指定分组的所有可用提供商
+- `yc provider-selection <id>` - 查询指定分组的当前提供商
+- `yc set-provider-selection <id> <alt>` - 设置指定分组的提供商
 - `yc install` - 安装 yc 到系统
 - `yc uninstall` - 卸载 yc
 - `yc --help` - 显示帮助信息
@@ -60,10 +60,10 @@ yc uninstall
 消费进度：[█░░░░░░░░░░░░░░░░░░░░░░░░░░░░░] 5.6%
 ```
 
-### 提供商查询
+### 分组查询
 
 ```
-🔌 可用提供商
+🔌 可用分组
 
 Basic/Swift API Endpoint [默认]
   ID: provider-123  |  类型: claude  |  费率: ×0.8  |  来源: 订阅
@@ -78,14 +78,14 @@ PAYGO APIs
   ID: provider-abc  |  类型: claude  |  费率: ×0.5  |  来源: 按需
 ```
 
-### 查询提供商的所有可用服务方案
+### 查询分组的所有可用提供商
 
-查看提供商提供的所有可选服务方案（包括原方案和替代方案）：
+查看分组的所有可选提供商（包括原方案和替代方案）：
 
 ```
-🔄 提供商替代方案
+🔄 分组替代方案
 
-原提供商：OpenAI (openai, ID: 3)
+原分组：OpenAI (openai, ID: 3)
 
 可用替代方案 (4)：
 
@@ -99,22 +99,22 @@ PAYGO APIs
 
 ```
 
-### 查询提供商当前生效的服务方案
+### 查询分组当前生效的提供商
 
-查看提供商当前实际使用的是哪个服务方案：
+查看分组当前实际使用的是哪个提供商：
 
 ```
-提供商 3 当前生效的服务方案：
+分组 3 当前生效的提供商：
 ID: 3 | OpenAI | 费率: ×0.1 | 类型: openai
 
 ```
 
-### 设置提供商的生效服务方案
+### 设置分组的生效提供商
 
-将提供商的生效服务方案切换到指定的替代方案：
+将分组的生效提供商切换到指定的替代方案：
 
 ```
-提供商 ID：5
+分组 ID：5
 已切换到：YesCodeTest
   ID: 12  |  类型: claude  |  费率: ×0.1
 
@@ -122,13 +122,13 @@ ID: 3 | OpenAI | 费率: ×0.1 | 类型: openai
 
 **典型使用流程：**
 ```bash
-# 1. 查看提供商 5 有哪些可用服务方案
+# 1. 查看分组 5 有哪些可用提供商
 yc provider-alternatives 5
 
-# 2. 查看提供商 5 当前生效的是哪个方案
+# 2. 查看分组 5 当前生效的是哪个方案
 yc provider-selection 5
 
-# 3. 切换提供商 5 到服务方案 12
+# 3. 切换分组 5 到提供商 12
 yc set-provider-selection 5 12
 
 # 4. 确认切换成功

@@ -296,7 +296,7 @@ api_get_providers() {
     fi
 
     if [[ "$http_code" != "200" ]]; then
-        echo -e "${RED}获取提供商信息失败: HTTP $http_code${RESET}" >&2
+        echo -e "${RED}获取分组信息失败: HTTP $http_code${RESET}" >&2
         echo "响应内容: $body" >&2
         return 1
     fi
@@ -312,7 +312,7 @@ api_get_provider_alternatives() {
         return 1
     fi
 
-    # 获取指定提供商提供的所有可用服务方案（包括原方案和替代方案）
+    # 获取指定分组提供的所有可用提供商（包括原方案和替代方案）
     local url="${API_BASE_URL}/api/v1/user/provider-alternatives/${provider_id}"
 
     # 使用 curl 发送请求
@@ -340,7 +340,7 @@ api_get_provider_alternatives() {
     fi
 
     if [[ "$http_code" != "200" ]]; then
-        echo -e "${RED}获取替代提供商失败: HTTP $http_code${RESET}" >&2
+        echo -e "${RED}获取分组失败: HTTP $http_code${RESET}" >&2
         echo "响应内容: $body" >&2
         return 1
     fi
@@ -356,7 +356,7 @@ api_get_provider_selection() {
         return 1
     fi
 
-    # 获取指定提供商当前生效的服务方案
+    # 获取指定分组当前生效的提供商
     local url="${API_BASE_URL}/api/v1/user/provider-alternatives/${provider_id}/selection"
 
     # 使用 curl 发送请求
@@ -406,8 +406,8 @@ api_set_provider_selection() {
         return 1
     fi
 
-    # 设置指定提供商的生效服务方案
-    # 参数: provider_id - 提供商ID, selected_alternative_id - 要设置的服务方案ID
+    # 设置指定分组的生效提供商
+    # 参数: provider_id - 分组ID, selected_alternative_id - 要设置的提供商ID
     local url="${API_BASE_URL}/api/v1/user/provider-alternatives/${provider_id}/selection"
 
     # 构造 JSON 请求体
@@ -520,7 +520,7 @@ display_providers_info() {
     local has_subscription=$(echo "$data" | jq -r '.has_subscription')
 
     # 显示账户状态
-    echo -e "${CYAN}${BOLD}🔌 可用提供商${RESET}"
+    echo -e "${CYAN}${BOLD}🔌 可用分组${RESET}"
     echo
 
     # 使用 jq 解析 providers 数组
@@ -550,7 +550,7 @@ display_providers_info() {
             default_mark=" ${GREEN}[默认]${RESET}"
         fi
 
-        # 显示提供商信息
+        # 显示分组信息
         echo -e "${WHITE}${BOLD}${display_name}${RESET}${default_mark}"
         echo -e "ID: ${BLUE}${provider_id}${RESET} | 类型: ${type} | 费率: ${MAGENTA}×${rate}${RESET} | 来源: ${source_text}"
         echo
@@ -564,14 +564,14 @@ display_provider_alternatives() {
     # 检查是否有数据
     local data_count=$(echo "$data" | jq '.data | length')
     if [[ "$data_count" == "0" || "$data_count" == "null" ]]; then
-        echo -e "${RED}错误: 提供商不存在${RESET}"
+        echo -e "${RED}错误: 分组不存在${RESET}"
         echo
-        echo -e "${YELLOW}提示: 请先运行 ${WHITE}yc providers${YELLOW} 查看可用的提供商 ID${RESET}"
+        echo -e "${YELLOW}提示: 请先运行 ${WHITE}yc providers${YELLOW} 查看可用的分组 ID${RESET}"
         return 1
     fi
 
     # 显示标题
-    echo -e "${CYAN}${BOLD}提供商 ${provider_id} 可用服务方案：${RESET}"
+    echo -e "${CYAN}${BOLD}分组 ${provider_id} 可用提供商：${RESET}"
     echo
 
     # 遍历所有方案（包括原方案和替代方案）
@@ -601,9 +601,9 @@ display_provider_selection() {
     # 检查是否有数据
     local selection_data=$(echo "$data" | jq -r '.data')
     if [[ "$selection_data" == "null" ]]; then
-        echo -e "${RED}错误: 提供商不存在${RESET}"
+        echo -e "${RED}错误: 分组不存在${RESET}"
         echo
-        echo -e "${YELLOW}提示: 请先运行 ${WHITE}yc providers${YELLOW} 查看可用的提供商 ID${RESET}"
+        echo -e "${YELLOW}提示: 请先运行 ${WHITE}yc providers${YELLOW} 查看可用的分组 ID${RESET}"
         return 1
     fi
 
@@ -617,7 +617,7 @@ display_provider_selection() {
     local description=$(echo "$selected_alt" | jq -r '.description')
 
     # 优化输出格式
-    echo -e "提供商 ${BLUE}${provider_id}${RESET} 当前生效的服务方案："
+    echo -e "分组 ${BLUE}${provider_id}${RESET} 当前生效的提供商："
     echo -e "ID: ${BLUE}${selected_alt_id}${RESET} | ${GREEN}${BOLD}${display_name}${RESET} | 费率: ${MAGENTA}×${rate}${RESET} | 类型: ${type}"
 }
 
@@ -628,14 +628,14 @@ display_provider_selection() {
 interactive_select_provider() {
     local providers_data=$1
 
-    echo -e "${CYAN}${BOLD}📋 选择要切换服务方案的提供商：${RESET}" >&2
+    echo -e "${CYAN}${BOLD}📋 选择要切换提供商的分组：${RESET}" >&2
     echo >&2
 
-    # 解析并显示提供商列表
+    # 解析并显示分组列表
     local providers_count=$(echo "$providers_data" | jq '.providers | length')
 
     if [[ "$providers_count" == "0" ]]; then
-        echo -e "${RED}错误: 没有可用的提供商${RESET}" >&2
+        echo -e "${RED}错误: 没有可用的分组${RESET}" >&2
         return 1
     fi
 
@@ -678,7 +678,7 @@ interactive_select_provider() {
 
     # 获取用户输入
     while true; do
-        read -p "请输入提供商序号 [1-$providers_count] (输入 q 退出): " choice
+        read -p "请输入分组序号 [1-$providers_count] (输入 q 退出): " choice
 
         # 支持退出
         if [[ "$choice" == "q" || "$choice" == "Q" ]]; then
@@ -711,14 +711,14 @@ interactive_select_alternative() {
     local provider_name=$4
 
     echo >&2
-    echo -e "${CYAN}${BOLD}📋 ${provider_name} 的可选服务方案：${RESET}" >&2
+    echo -e "${CYAN}${BOLD}📋 ${provider_name} 分组的可选提供商：${RESET}" >&2
     echo >&2
 
     # 解析方案数据
     local data_count=$(echo "$alternatives_data" | jq '.data | length')
 
     if [[ "$data_count" == "0" || "$data_count" == "null" ]]; then
-        echo -e "${RED}错误: 没有可用的服务方案${RESET}" >&2
+        echo -e "${RED}错误: 没有可用的提供商${RESET}" >&2
         return 1
     fi
 
@@ -870,7 +870,7 @@ cmd_providers() {
     local api_pid=$!
 
     # 显示 loading 动画
-    show_loading "正在查询提供商..." $api_pid
+    show_loading "正在查询分组..." $api_pid
 
     # 等待后台任务完成
     wait $api_pid
@@ -897,7 +897,7 @@ cmd_providers() {
         temp_file=$(mktemp)
         (api_get_providers > "$temp_file" 2>&1; echo $? > "${temp_file}.exit") &
         api_pid=$!
-        show_loading "正在重新查询提供商..." $api_pid
+        show_loading "正在重新查询分组..." $api_pid
         wait $api_pid
         providers_data=$(cat "$temp_file")
         exit_code=$(cat "${temp_file}.exit")
@@ -911,7 +911,7 @@ cmd_providers() {
         display_providers_info "$providers_data"
         echo
     else
-        echo -e "${RED}✗ 获取提供商信息失败${RESET}"
+        echo -e "${RED}✗ 获取分组信息失败${RESET}"
         exit 1
     fi
 }
@@ -937,7 +937,7 @@ cmd_provider_alternatives() {
     local api_pid=$!
 
     # 显示 loading 动画
-    show_loading "正在查询可用服务方案..." $api_pid
+    show_loading "正在查询可用提供商..." $api_pid
 
     # 等待后台任务完成
     wait $api_pid
@@ -964,7 +964,7 @@ cmd_provider_alternatives() {
         temp_file=$(mktemp)
         (api_get_provider_alternatives "$provider_id" > "$temp_file" 2>&1; echo $? > "${temp_file}.exit") &
         api_pid=$!
-        show_loading "正在重新查询可用服务方案..." $api_pid
+        show_loading "正在重新查询可用提供商..." $api_pid
         wait $api_pid
         alternatives_data=$(cat "$temp_file")
         exit_code=$(cat "${temp_file}.exit")
@@ -978,7 +978,7 @@ cmd_provider_alternatives() {
         display_provider_alternatives "$alternatives_data" "$provider_id"
         echo
     else
-        echo -e "${RED}✗ 获取可用服务方案失败${RESET}"
+        echo -e "${RED}✗ 获取可用提供商失败${RESET}"
         exit 1
     fi
 }
@@ -1004,7 +1004,7 @@ cmd_provider_selection() {
     local api_pid=$!
 
     # 显示 loading 动画
-    show_loading "正在查询当前生效的服务方案..." $api_pid
+    show_loading "正在查询当前生效的提供商..." $api_pid
 
     # 等待后台任务完成
     wait $api_pid
@@ -1031,7 +1031,7 @@ cmd_provider_selection() {
         temp_file=$(mktemp)
         (api_get_provider_selection "$provider_id" > "$temp_file" 2>&1; echo $? > "${temp_file}.exit") &
         api_pid=$!
-        show_loading "正在重新查询当前生效的服务方案..." $api_pid
+        show_loading "正在重新查询当前生效的提供商..." $api_pid
         wait $api_pid
         selection_data=$(cat "$temp_file")
         exit_code=$(cat "${temp_file}.exit")
@@ -1045,7 +1045,7 @@ cmd_provider_selection() {
         display_provider_selection "$selection_data"
         echo
     else
-        echo -e "${RED}✗ 获取当前生效的服务方案失败${RESET}"
+        echo -e "${RED}✗ 获取当前生效的提供商失败${RESET}"
         exit 1
     fi
 }
@@ -1078,7 +1078,7 @@ cmd_set_provider_selection() {
     local api_pid=$!
 
     # 显示 loading 动画
-    show_loading "正在切换服务方案..." $api_pid
+    show_loading "正在切换提供商..." $api_pid
 
     # 等待后台任务完成
     wait $api_pid
@@ -1105,7 +1105,7 @@ cmd_set_provider_selection() {
         temp_file=$(mktemp)
         (api_set_provider_selection "$provider_id" "$selected_alternative_id" > "$temp_file" 2>&1; echo $? > "${temp_file}.exit") &
         api_pid=$!
-        show_loading "正在重新设置生效的服务方案..." $api_pid
+        show_loading "正在重新设置生效的提供商..." $api_pid
         wait $api_pid
         result_data=$(cat "$temp_file")
         exit_code=$(cat "${temp_file}.exit")
@@ -1124,11 +1124,11 @@ cmd_set_provider_selection() {
         local type=$(echo "$selected_alt" | jq -r '.type')
         local rate=$(echo "$selected_alt" | jq -r '.rate_multiplier')
 
-        echo -e "提供商 ${BLUE}${provider_id}${RESET} 服务方案已切换为：${WHITE}${BOLD}${display_name}${RESET}"
+        echo -e "分组 ${BLUE}${provider_id}${RESET} 提供商已切换为：${WHITE}${BOLD}${display_name}${RESET}"
         echo -e "ID: ${BLUE}${alt_id}${RESET} | 类型: ${type} | 费率: ${MAGENTA}×${rate}${RESET}"
         echo
     else
-        echo -e "${RED}✗ 服务方案设置失败${RESET}"
+        echo -e "${RED}✗ 提供商设置失败${RESET}"
         exit 1
     fi
 }
@@ -1144,12 +1144,12 @@ cmd_switch() {
 
     # 如果没有提供 provider_id，则进入交互式选择
     if [[ -z "$provider_id" ]]; then
-        # 获取所有提供商
+        # 获取所有分组
         temp_file=$(mktemp)
         set +e
         (api_get_providers > "$temp_file" 2>&1; echo $? > "${temp_file}.exit") &
         local api_pid=$!
-        show_loading "正在加载提供商列表..." $api_pid
+        show_loading "正在加载分组列表..." $api_pid
         wait $api_pid
         providers_data=$(cat "$temp_file")
         exit_code=$(cat "${temp_file}.exit")
@@ -1167,7 +1167,7 @@ cmd_switch() {
             set +e
             (api_get_providers > "$temp_file" 2>&1; echo $? > "${temp_file}.exit") &
             api_pid=$!
-            show_loading "正在重新加载提供商列表..." $api_pid
+            show_loading "正在重新加载分组列表..." $api_pid
             wait $api_pid
             providers_data=$(cat "$temp_file")
             exit_code=$(cat "${temp_file}.exit")
@@ -1176,12 +1176,12 @@ cmd_switch() {
         fi
 
         if [[ $exit_code -ne 0 || -z "$providers_data" || "$providers_data" == "AUTH_ERROR_401" ]]; then
-            echo -e "${RED}✗ 获取提供商列表失败${RESET}"
+            echo -e "${RED}✗ 获取分组列表失败${RESET}"
             exit 1
         fi
 
         echo
-        # 交互式选择提供商（返回格式: id|name）
+        # 交互式选择分组（返回格式: id|name）
         local selection_result
         selection_result=$(interactive_select_provider "$providers_data")
         if [[ $? -ne 0 || -z "$selection_result" ]]; then
@@ -1194,12 +1194,12 @@ cmd_switch() {
         provider_id=$(echo "$selection_result" | cut -d'|' -f1)
         provider_name=$(echo "$selection_result" | cut -d'|' -f2)
     else
-        # 如果直接指定了 provider_id，需要查询提供商名称
+        # 如果直接指定了 provider_id，需要查询分组名称
         temp_file=$(mktemp)
         set +e
         (api_get_providers > "$temp_file" 2>&1; echo $? > "${temp_file}.exit") &
         local api_pid=$!
-        show_loading "正在查询提供商信息..." $api_pid
+        show_loading "正在查询分组信息..." $api_pid
         wait $api_pid
         providers_data=$(cat "$temp_file")
         exit_code=$(cat "${temp_file}.exit")
@@ -1207,13 +1207,13 @@ cmd_switch() {
         set -e
 
         if [[ $exit_code -eq 0 && -n "$providers_data" ]]; then
-            # 从 providers_data 中查找提供商名称
+            # 从 providers_data 中查找分组名称
             provider_name=$(echo "$providers_data" | jq -r ".providers[] | select(.provider.id == $provider_id) | .provider.display_name")
             if [[ -z "$provider_name" || "$provider_name" == "null" ]]; then
-                provider_name="提供商 ${provider_id}"
+                provider_name="分组 ${provider_id}"
             fi
         else
-            provider_name="提供商 ${provider_id}"
+            provider_name="分组 ${provider_id}"
         fi
     fi
 
@@ -1228,7 +1228,7 @@ cmd_switch() {
     local pid_selection=$!
 
     # 显示 loading 动画
-    show_loading "正在加载服务方案列表..." $pid_alternatives
+    show_loading "正在加载提供商列表..." $pid_alternatives
 
     # 等待两个 API 调用完成
     wait $pid_alternatives
@@ -1264,7 +1264,7 @@ cmd_switch() {
     set +e
     (api_set_provider_selection "$provider_id" "$selected_alt_id" > "$temp_file" 2>&1; echo $? > "${temp_file}.exit") &
     local api_pid=$!
-    show_loading "正在切换服务方案..." $api_pid
+    show_loading "正在切换提供商..." $api_pid
     wait $api_pid
     result_data=$(cat "$temp_file")
     exit_code=$(cat "${temp_file}.exit")
@@ -1280,7 +1280,7 @@ cmd_switch() {
 
         echo -e "${GREEN}${BOLD}✓ 切换成功！${RESET}"
         echo
-        echo -e "${provider_name} 的服务方案已切换为："
+        echo -e "${provider_name} 的提供商已切换为："
         echo -e "${WHITE}${BOLD}${display_name}${RESET} | 费率: ${MAGENTA}×${rate}${RESET}"
         echo
     else
@@ -1473,15 +1473,15 @@ show_help() {
     cat << EOF
 usage: yc [-h] {balance,providers,provider-alternatives,provider-selection,set-provider-selection,switch,install,uninstall}
 
-YesCode API 调用工具 - 查询余额、提供商等功能
+YesCode API 调用工具 - 查询余额、分组等功能
 
 positional arguments:
   balance                              查询账户余额和订阅信息
-  providers                            查询可用的 AI 提供商
-  provider-alternatives <id>           查询指定提供商提供的所有可用服务方案
-  provider-selection <id>              查询指定提供商当前生效的服务方案
-  set-provider-selection <id> <alt>    设置指定提供商的生效服务方案
-  switch [id]                          交互式切换服务方案 (推荐使用)
+  providers                            查询可用的 AI 分组
+  provider-alternatives <id>           查询指定分组提供的所有可用提供商
+  provider-selection <id>              查询指定分组当前生效的提供商
+  set-provider-selection <id> <alt>    设置指定分组的生效提供商
+  switch [id]                          交互式切换提供商 (推荐使用)
   install                              安装 yc 命令到系统
   uninstall                            卸载 yc 命令
 
@@ -1490,12 +1490,12 @@ options:
 
 使用示例:
   yc balance                          # 查询余额
-  yc providers                        # 查询提供商
-  yc provider-alternatives 5          # 查询提供商 5 的所有可用服务方案
-  yc provider-selection 5             # 查询提供商 5 当前生效的服务方案
-  yc set-provider-selection 5 12      # 设置提供商 5 的生效服务方案为 12
-  yc switch                           # 交互式切换服务方案（自动选择提供商）
-  yc switch 5                         # 切换提供商 5 的服务方案
+  yc providers                        # 查询分组
+  yc provider-alternatives 5          # 查询分组 5 的所有可用提供商
+  yc provider-selection 5             # 查询分组 5 的当前提供商
+  yc set-provider-selection 5 12      # 设置分组 5 的提供商为 12
+  yc switch                           # 交互式切换提供商
+  yc switch 5                         # 切换分组 5 的提供商
   yc install                          # 安装 yc
   yc uninstall                        # 卸载 yc
   yc --help                           # 显示帮助信息
