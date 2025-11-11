@@ -662,7 +662,7 @@ interactive_select_provider() {
         fi
 
         # 构建显示行
-        local display_line="  ${WHITE}${BOLD}[$((i+1))]${RESET} ${display_name}"
+        local display_line="  ${WHITE}${BOLD}[$((i+1))]${RESET} ${display_name} | ID: ${BLUE}${provider_id}${RESET}"
 
         # 按需付费显示费率
         if [[ "$source" == "pay_as_you_go" ]]; then
