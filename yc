@@ -554,7 +554,7 @@ display_providers_info() {
 
         # 显示提供商信息
         echo -e "${WHITE}${BOLD}${display_name}${RESET}${default_mark}"
-        echo -e "  ID: ${BLUE}${provider_id}${RESET}  |  类型: ${type}  |  费率: ${MAGENTA}×${rate}${RESET}  |  来源: ${source_text}"
+        echo -e "ID: ${BLUE}${provider_id}${RESET} | 类型: ${type} | 费率: ${MAGENTA}×${rate}${RESET} | 来源: ${source_text}"
         echo
     done
 }
@@ -646,16 +646,30 @@ display_provider_selection() {
 # ============================================================
 
 cmd_balance() {
-    echo
-    echo "正在查询余额..."
-
     local balance_data
     local exit_code
+    local temp_file=$(mktemp)
 
     # 临时禁用 set -e，允许捕获非零退出码
     set +e
-    balance_data=$(api_get_balance)
-    exit_code=$?
+
+    # 在后台执行 API 调用
+    (api_get_balance > "$temp_file" 2>&1; echo $? > "${temp_file}.exit") &
+    local api_pid=$!
+
+    # 显示 loading 动画
+    show_loading "正在查询余额..." $api_pid
+
+    # 等待后台任务完成
+    wait $api_pid
+
+    # 读取结果
+    balance_data=$(cat "$temp_file")
+    exit_code=$(cat "${temp_file}.exit")
+
+    # 清理临时文件
+    rm -f "$temp_file" "${temp_file}.exit"
+
     set -e
 
     # 如果是认证错误（401），提示用户重新输入 API Key
@@ -666,18 +680,24 @@ cmd_balance() {
         # 重新加载配置
         load_config
 
-        # 重试请求
-        echo "正在重新查询余额..."
+        # 重试请求（带loading）
         set +e
-        balance_data=$(api_get_balance)
-        exit_code=$?
+        temp_file=$(mktemp)
+        (api_get_balance > "$temp_file" 2>&1; echo $? > "${temp_file}.exit") &
+        api_pid=$!
+        show_loading "正在重新查询余额..." $api_pid
+        wait $api_pid
+        balance_data=$(cat "$temp_file")
+        exit_code=$(cat "${temp_file}.exit")
+        rm -f "$temp_file" "${temp_file}.exit"
         set -e
     fi
 
     # 检查最终结果
     if [[ $exit_code -eq 0 && -n "$balance_data" && "$balance_data" != "AUTH_ERROR_401" ]]; then
-        echo -e "✓ 获取余额信息成功!\n"
+        echo
         display_balance_info "$balance_data"
+        echo
     else
         echo -e "${RED}✗ 获取余额失败${RESET}"
         exit 1
@@ -685,16 +705,30 @@ cmd_balance() {
 }
 
 cmd_providers() {
-    echo
-    echo "正在查询提供商..."
-
     local providers_data
     local exit_code
+    local temp_file=$(mktemp)
 
     # 临时禁用 set -e，允许捕获非零退出码
     set +e
-    providers_data=$(api_get_providers)
-    exit_code=$?
+
+    # 在后台执行 API 调用
+    (api_get_providers > "$temp_file" 2>&1; echo $? > "${temp_file}.exit") &
+    local api_pid=$!
+
+    # 显示 loading 动画
+    show_loading "正在查询提供商..." $api_pid
+
+    # 等待后台任务完成
+    wait $api_pid
+
+    # 读取结果
+    providers_data=$(cat "$temp_file")
+    exit_code=$(cat "${temp_file}.exit")
+
+    # 清理临时文件
+    rm -f "$temp_file" "${temp_file}.exit"
+
     set -e
 
     # 如果是认证错误（401），提示用户重新输入 API Key
@@ -705,18 +739,24 @@ cmd_providers() {
         # 重新加载配置
         load_config
 
-        # 重试请求
-        echo "正在重新查询提供商..."
+        # 重试请求（带loading）
         set +e
-        providers_data=$(api_get_providers)
-        exit_code=$?
+        temp_file=$(mktemp)
+        (api_get_providers > "$temp_file" 2>&1; echo $? > "${temp_file}.exit") &
+        api_pid=$!
+        show_loading "正在重新查询提供商..." $api_pid
+        wait $api_pid
+        providers_data=$(cat "$temp_file")
+        exit_code=$(cat "${temp_file}.exit")
+        rm -f "$temp_file" "${temp_file}.exit"
         set -e
     fi
 
     # 检查最终结果
     if [[ $exit_code -eq 0 && -n "$providers_data" && "$providers_data" != "AUTH_ERROR_401" ]]; then
-        echo -e "✓ 获取提供商信息成功!\n"
+        echo
         display_providers_info "$providers_data"
+        echo
     else
         echo -e "${RED}✗ 获取提供商信息失败${RESET}"
         exit 1
