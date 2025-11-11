@@ -1,14 +1,6 @@
 # YesCode CLI (yc)
 
-简洁的 YesCode API 调用工具，纯 Bash 实现，支持余额查询等功能。
-
-## 功能特点
-
-- **纯 Bash 实现** - 轻量级，仅依赖 curl 和 jq
-- **一键安装** - 自包含脚本，可自行安装/卸载
-- **自动配置** - 首次运行自动提示输入 API Key
-- **彩色输出** - 美观的终端界面和进度条
-- **安全可靠** - API Key 自动安全存储
+YesCode API 调用工具，纯 Bash 实现。
 
 ## 快速开始
 
@@ -26,6 +18,9 @@
 # 查询余额（首次运行会自动提示输入 API Key）
 yc balance
 
+# 交互式切换提供商（推荐）
+yc switch [id]
+
 # 查看帮助
 yc --help
 
@@ -36,160 +31,14 @@ yc uninstall
 ## 命令说明
 
 - `yc balance` - 查询账户余额和订阅信息
+- `yc switch [id]` - **交互式切换提供商（推荐）**
 - `yc providers` - 查询可用提供商分组信息
 - `yc provider-alternatives <id>` - 查询指定分组的所有可用提供商
 - `yc provider-selection <id>` - 查询指定分组的当前提供商
 - `yc set-provider-selection <id> <alt>` - 设置指定分组的提供商
-- `yc switch [id]` - **交互式切换提供商（推荐）**
 - `yc install` - 安装 yc 到系统
 - `yc uninstall` - 卸载 yc
 - `yc --help` - 显示帮助信息
-
-## 输出示例
-
-### 余额查询
-
-```
-💰 余额信息
-订阅余额：¥34.80
-总余额：¥74.40
-
-📊 本周消费
-周限额：¥100.00
-已消费：¥5.59 (5.6%)
-剩余额度：¥94.41 (94.4%)
-消费进度：[█░░░░░░░░░░░░░░░░░░░░░░░░░░░░░] 5.6%
-```
-
-### 分组查询
-
-```
-🔌 可用分组
-
-Basic/Swift API Endpoint [默认]
-  ID: provider-123  |  类型: claude  |  费率: ×0.8  |  来源: 订阅
-
-OpenAI [默认]
-  ID: provider-456  |  类型: openai  |  费率: ×0.1  |  来源: 订阅
-
-GoogleAPI [默认]
-  ID: provider-789  |  类型: google  |  费率: ×0.1  |  来源: 订阅
-
-PAYGO APIs
-  ID: provider-abc  |  类型: claude  |  费率: ×0.5  |  来源: 按需
-```
-
-### 查询分组的所有可用提供商
-
-查看分组的所有可选提供商（包括原方案和替代方案）：
-
-```
-🔄 分组替代方案
-
-原分组：OpenAI (openai, ID: 3)
-
-可用替代方案 (4)：
-
-1. ID: 9 | OpenAIBackup | 费率: ×0.2 | 类型: openai
-
-2. ID: 11 | CodexTest | 费率: ×0.1 | 类型: openai
-
-3. ID: 14 | YesCodeTest(Codex) | 费率: ×0.1 | 类型: openai
-
-4. ID: 16 | OpenAIOffical | 费率: ×1 | 类型: openai
-
-```
-
-### 查询分组当前生效的提供商
-
-查看分组当前实际使用的是哪个提供商：
-
-```
-分组 3 当前生效的提供商：
-ID: 3 | OpenAI | 费率: ×0.1 | 类型: openai
-
-```
-
-### 设置分组的生效提供商
-
-将分组的生效提供商切换到指定的替代方案：
-
-```
-分组 ID：5
-已切换到：YesCodeTest
-  ID: 12  |  类型: claude  |  费率: ×0.1
-
-```
-
-**典型使用流程：**
-```bash
-# 1. 查看分组 5 有哪些可用提供商
-yc provider-alternatives 5
-
-# 2. 查看分组 5 当前生效的是哪个方案
-yc provider-selection 5
-
-# 3. 切换分组 5 到提供商 12
-yc set-provider-selection 5 12
-
-# 4. 确认切换成功
-yc provider-selection 5
-```
-
-### 交互式切换（推荐）
-
-**`yc switch`** 命令提供了更便捷的交互式体验，无需记忆分组和提供商 ID：
-
-#### 完整交互流程
-
-```bash
-yc switch
-```
-
-**第一步：选择分组**
-```
-📋 选择要切换提供商的分组：
-
-  [1] Basic/Swift API Endpoint | ID: 5 | 来源: 订阅
-  [2] OpenAI | ID: 3 | 来源: 订阅
-  [3] GoogleAPI | ID: 7 | 来源: 订阅
-  [4] PAYGO APIs | ID: 9 | 费率: ×0.5 | 来源: 按需
-
-请输入分组序号 [1-4] (输入 q 退出): 2
-```
-
-**第二步：选择提供商**
-```
-📋 OpenAI 分组的可选提供商：
-
-  [1] [当前] OpenAI | 费率: ×0.1
-  [2] OpenAIBackup | 费率: ×0.2
-  [3] CodexTest （官方） | 费率: ×0.1
-  [4] OpenAIOffical | 费率: ×1
-
-请输入提供商序号 [1-4] (输入 q 退出): 3
-```
-
-**切换成功**
-```
-✓ 切换成功！
-
-OpenAI 的提供商已切换为：
-CodexTest | 费率: ×0.1
-```
-
-#### 直接指定分组
-
-如果你已知道分组 ID，可以直接跳到第二步：
-
-```bash
-yc switch 3    # 直接切换分组 3 的提供商
-```
-
-**特点说明：**
-- **[当前]** 标记：显示当前正在使用的提供商
-- **（官方）** 标记：显示官方原始方案
-- 支持随时输入 `q` 退出
 
 ## 扩展开发
 
@@ -219,12 +68,6 @@ cmd_your_command() {
 }
 ```
 
-## 安全说明
-
-- API Key 自动安全存储，仅本人可访问
-- 定期轮换 API Key 以保障安全
-- API Base URL 固定为 `https://co.yes.vg`
-
 ## 故障排除
 
 ### 依赖问题
@@ -250,17 +93,3 @@ sudo pacman -S curl jq
 # openSUSE
 sudo zypper install curl jq
 ```
-
-### 认证问题
-
-**401 错误** - 程序会自动提示重新输入 API Key
-
-**重置配置** - 删除配置文件后重新运行：
-```bash
-rm ~/.yescode/config.json
-yc balance  # 将提示重新输入
-```
-
-### 网络问题
-
-检查网络连接，确认可访问 `https://co.yes.vg`
