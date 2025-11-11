@@ -622,6 +622,177 @@ display_provider_selection() {
 }
 
 # ============================================================
+# 交互式选择函数
+# ============================================================
+
+interactive_select_provider() {
+    local providers_data=$1
+
+    echo -e "${CYAN}${BOLD}📋 选择要切换的提供商：${RESET}" >&2
+    echo >&2
+
+    # 解析并显示提供商列表
+    local providers_count=$(echo "$providers_data" | jq '.providers | length')
+
+    if [[ "$providers_count" == "0" ]]; then
+        echo -e "${RED}错误: 没有可用的提供商${RESET}" >&2
+        return 1
+    fi
+
+    # 创建序号数组和ID映射
+    declare -a provider_ids
+    declare -a provider_names
+
+    for ((i=0; i<$providers_count; i++)); do
+        local provider_data=$(echo "$providers_data" | jq -r ".providers[$i]")
+        local provider_id=$(echo "$provider_data" | jq -r '.provider.id')
+        local display_name=$(echo "$provider_data" | jq -r '.provider.display_name')
+        local rate=$(echo "$provider_data" | jq -r '.rate_multiplier')
+        local source=$(echo "$provider_data" | jq -r '.source')
+
+        provider_ids[$i]=$provider_id
+        provider_names[$i]=$display_name
+
+        # 转换 source 为中文
+        local source_text=""
+        if [[ "$source" == "subscription" ]]; then
+            source_text="${CYAN}订阅${RESET}"
+        else
+            source_text="${YELLOW}按需${RESET}"
+        fi
+
+        # 构建显示行
+        local display_line="  ${WHITE}${BOLD}[$((i+1))]${RESET} ${display_name}"
+
+        # 按需付费显示费率
+        if [[ "$source" == "pay_as_you_go" ]]; then
+            display_line="${display_line} | 费率: ${MAGENTA}×${rate}${RESET}"
+        fi
+
+        display_line="${display_line} | 来源: ${source_text}"
+
+        echo -e "$display_line" >&2
+    done
+
+    echo >&2
+
+    # 获取用户输入
+    while true; do
+        read -p "请输入提供商序号 [1-$providers_count] (输入 q 退出): " choice
+
+        # 支持退出
+        if [[ "$choice" == "q" || "$choice" == "Q" ]]; then
+            return 1
+        fi
+
+        # 验证输入是否为数字
+        if ! [[ "$choice" =~ ^[0-9]+$ ]]; then
+            echo -e "${RED}错误: 请输入有效的序号${RESET}" >&2
+            continue
+        fi
+
+        # 验证范围
+        if [[ "$choice" -lt 1 || "$choice" -gt "$providers_count" ]]; then
+            echo -e "${RED}错误: 序号超出范围，请输入 1-$providers_count${RESET}" >&2
+            continue
+        fi
+
+        # 返回选中的 provider_id 和名称，用 | 分隔
+        local selected_index=$((choice - 1))
+        echo "${provider_ids[$selected_index]}|${provider_names[$selected_index]}"
+        return 0
+    done
+}
+
+interactive_select_alternative() {
+    local provider_id=$1
+    local alternatives_data=$2
+    local current_selection=$3
+    local provider_name=$4
+
+    echo >&2
+    echo -e "${CYAN}${BOLD}📋 ${provider_name} 的可选服务方案：${RESET}" >&2
+    echo >&2
+
+    # 解析方案数据
+    local data_count=$(echo "$alternatives_data" | jq '.data | length')
+
+    if [[ "$data_count" == "0" || "$data_count" == "null" ]]; then
+        echo -e "${RED}错误: 没有可用的服务方案${RESET}" >&2
+        return 1
+    fi
+
+    # 提取当前选择的方案ID
+    local current_alt_id=$(echo "$current_selection" | jq -r '.data.selected_alternative_id')
+
+    # 创建方案数组
+    declare -a alternative_ids
+    declare -a alternative_names
+
+    for ((i=0; i<$data_count; i++)); do
+        local item=$(echo "$alternatives_data" | jq -r ".data[$i]")
+        local alt_id=$(echo "$item" | jq -r '.alternative.id')
+        local display_name=$(echo "$item" | jq -r '.alternative.display_name')
+        local rate=$(echo "$item" | jq -r '.alternative.rate_multiplier')
+        local is_self=$(echo "$item" | jq -r '.is_self')
+
+        alternative_ids[$i]=$alt_id
+        alternative_names[$i]=$display_name
+
+        # 判断是否为当前方案或默认方案
+        local prefix_mark=""
+        local suffix_mark=""
+
+        if [[ "$alt_id" == "$current_alt_id" ]]; then
+            prefix_mark="${GREEN}${BOLD}[当前]${RESET} "
+        elif [[ "$is_self" == "true" ]]; then
+            suffix_mark=" ${YELLOW}(默认)${RESET}"
+        fi
+
+        # 显示选项
+        echo -e "  ${WHITE}${BOLD}[$((i+1))]${RESET} ${prefix_mark}${display_name}${suffix_mark} | 费率: ${MAGENTA}×${rate}${RESET}" >&2
+    done
+
+    echo >&2
+
+    # 获取用户输入
+    while true; do
+        read -p "请输入要切换到的方案序号 [1-$data_count] (输入 q 退出): " choice
+
+        # 支持退出
+        if [[ "$choice" == "q" || "$choice" == "Q" ]]; then
+            return 1
+        fi
+
+        # 验证输入是否为数字
+        if ! [[ "$choice" =~ ^[0-9]+$ ]]; then
+            echo -e "${RED}错误: 请输入有效的序号${RESET}" >&2
+            continue
+        fi
+
+        # 验证范围
+        if [[ "$choice" -lt 1 || "$choice" -gt "$data_count" ]]; then
+            echo -e "${RED}错误: 序号超出范围，请输入 1-$data_count${RESET}" >&2
+            continue
+        fi
+
+        # 返回选中的 alternative_id
+        local selected_index=$((choice - 1))
+        local selected_id="${alternative_ids[$selected_index]}"
+
+        # 检查是否选择了当前方案
+        if [[ "$selected_id" == "$current_alt_id" ]]; then
+            echo -e "${YELLOW}⚠ 已经是当前方案，无需切换${RESET}" >&2
+            return 1
+        fi
+
+        # 直接返回选中的方案 ID
+        echo "$selected_id"
+        return 0
+    done
+}
+
+# ============================================================
 # 命令处理
 # ============================================================
 
@@ -960,6 +1131,162 @@ cmd_set_provider_selection() {
     fi
 }
 
+cmd_switch() {
+    local provider_id=$1
+    local provider_name=""
+    local providers_data
+    local alternatives_data
+    local current_selection
+    local exit_code
+    local temp_file
+
+    # 如果没有提供 provider_id，则进入交互式选择
+    if [[ -z "$provider_id" ]]; then
+        # 获取所有提供商
+        temp_file=$(mktemp)
+        set +e
+        (api_get_providers > "$temp_file" 2>&1; echo $? > "${temp_file}.exit") &
+        local api_pid=$!
+        show_loading "正在加载提供商列表..." $api_pid
+        wait $api_pid
+        providers_data=$(cat "$temp_file")
+        exit_code=$(cat "${temp_file}.exit")
+        rm -f "$temp_file" "${temp_file}.exit"
+        set -e
+
+        # 处理认证错误
+        if [[ $exit_code -eq 2 && "$providers_data" == "AUTH_ERROR_401" ]]; then
+            echo -e "${RED}✗ API Key 无效（401 认证失败）${RESET}"
+            prompt_api_key false
+            load_config
+
+            # 重试
+            temp_file=$(mktemp)
+            set +e
+            (api_get_providers > "$temp_file" 2>&1; echo $? > "${temp_file}.exit") &
+            api_pid=$!
+            show_loading "正在重新加载提供商列表..." $api_pid
+            wait $api_pid
+            providers_data=$(cat "$temp_file")
+            exit_code=$(cat "${temp_file}.exit")
+            rm -f "$temp_file" "${temp_file}.exit"
+            set -e
+        fi
+
+        if [[ $exit_code -ne 0 || -z "$providers_data" || "$providers_data" == "AUTH_ERROR_401" ]]; then
+            echo -e "${RED}✗ 获取提供商列表失败${RESET}"
+            exit 1
+        fi
+
+        echo
+        # 交互式选择提供商（返回格式: id|name）
+        local selection_result
+        selection_result=$(interactive_select_provider "$providers_data")
+        if [[ $? -ne 0 || -z "$selection_result" ]]; then
+            echo
+            echo -e "${YELLOW}已取消操作${RESET}"
+            exit 0
+        fi
+
+        # 拆分 id 和 name
+        provider_id=$(echo "$selection_result" | cut -d'|' -f1)
+        provider_name=$(echo "$selection_result" | cut -d'|' -f2)
+    else
+        # 如果直接指定了 provider_id，需要查询提供商名称
+        temp_file=$(mktemp)
+        set +e
+        (api_get_providers > "$temp_file" 2>&1; echo $? > "${temp_file}.exit") &
+        local api_pid=$!
+        show_loading "正在查询提供商信息..." $api_pid
+        wait $api_pid
+        providers_data=$(cat "$temp_file")
+        exit_code=$(cat "${temp_file}.exit")
+        rm -f "$temp_file" "${temp_file}.exit"
+        set -e
+
+        if [[ $exit_code -eq 0 && -n "$providers_data" ]]; then
+            # 从 providers_data 中查找提供商名称
+            provider_name=$(echo "$providers_data" | jq -r ".providers[] | select(.provider.id == $provider_id) | .provider.display_name")
+            if [[ -z "$provider_name" || "$provider_name" == "null" ]]; then
+                provider_name="提供商 ${provider_id}"
+            fi
+        else
+            provider_name="提供商 ${provider_id}"
+        fi
+    fi
+
+    # 并行获取可用方案和当前选择
+    local temp_alternatives=$(mktemp)
+    local temp_selection=$(mktemp)
+
+    set +e
+    (api_get_provider_alternatives "$provider_id" > "$temp_alternatives" 2>&1; echo $? > "${temp_alternatives}.exit") &
+    local pid_alternatives=$!
+    (api_get_provider_selection "$provider_id" > "$temp_selection" 2>&1; echo $? > "${temp_selection}.exit") &
+    local pid_selection=$!
+
+    # 显示 loading 动画
+    show_loading "正在加载服务方案列表..." $pid_alternatives
+
+    # 等待两个 API 调用完成
+    wait $pid_alternatives
+    wait $pid_selection
+
+    alternatives_data=$(cat "$temp_alternatives")
+    local exit_code_alt=$(cat "${temp_alternatives}.exit")
+    current_selection=$(cat "$temp_selection")
+    local exit_code_sel=$(cat "${temp_selection}.exit")
+
+    rm -f "$temp_alternatives" "${temp_alternatives}.exit" "$temp_selection" "${temp_selection}.exit"
+    set -e
+
+    # 检查结果
+    if [[ $exit_code_alt -ne 0 || $exit_code_sel -ne 0 ]]; then
+        echo -e "${RED}✗ 获取方案信息失败${RESET}"
+        echo -e "${YELLOW}提示: 请检查 provider_id 是否正确${RESET}"
+        exit 1
+    fi
+
+    # 交互式选择方案
+    local selected_alt_id
+    selected_alt_id=$(interactive_select_alternative "$provider_id" "$alternatives_data" "$current_selection" "$provider_name")
+    if [[ $? -ne 0 || -z "$selected_alt_id" ]]; then
+        echo
+        exit 0
+    fi
+
+    # 执行切换
+    echo
+    local result_data
+    temp_file=$(mktemp)
+    set +e
+    (api_set_provider_selection "$provider_id" "$selected_alt_id" > "$temp_file" 2>&1; echo $? > "${temp_file}.exit") &
+    local api_pid=$!
+    show_loading "正在切换服务方案..." $api_pid
+    wait $api_pid
+    result_data=$(cat "$temp_file")
+    exit_code=$(cat "${temp_file}.exit")
+    rm -f "$temp_file" "${temp_file}.exit"
+    set -e
+
+    # 检查切换结果
+    if [[ $exit_code -eq 0 && -n "$result_data" && "$result_data" != "AUTH_ERROR_401" ]]; then
+        echo
+        local selected_alt=$(echo "$result_data" | jq -r '.data.selected_alternative')
+        local display_name=$(echo "$selected_alt" | jq -r '.display_name')
+        local rate=$(echo "$selected_alt" | jq -r '.rate_multiplier')
+
+        echo -e "${GREEN}${BOLD}✓ 切换成功！${RESET}"
+        echo
+        echo -e "${provider_name} 的服务方案已切换为："
+        echo -e "${WHITE}${BOLD}${display_name}${RESET} | 费率: ${MAGENTA}×${rate}${RESET}"
+        echo
+    else
+        echo -e "${RED}✗ 切换失败${RESET}"
+        exit 1
+    fi
+}
+
 cmd_uninstall() {
     # 检测是否从项目目录运行（./yc 或相对路径）
     if [[ "$0" == ./* || "$0" == */* ]] && command -v yc &> /dev/null; then
@@ -1142,7 +1469,7 @@ cmd_install() {
 
 show_help() {
     cat << EOF
-usage: yc [-h] {balance,providers,provider-alternatives,provider-selection,set-provider-selection,install,uninstall}
+usage: yc [-h] {balance,providers,provider-alternatives,provider-selection,set-provider-selection,switch,install,uninstall}
 
 YesCode API 调用工具 - 查询余额、提供商等功能
 
@@ -1152,6 +1479,7 @@ positional arguments:
   provider-alternatives <id>           查询指定提供商提供的所有可用服务方案
   provider-selection <id>              查询指定提供商当前生效的服务方案
   set-provider-selection <id> <alt>    设置指定提供商的生效服务方案
+  switch [id]                          交互式切换服务方案 (推荐使用)
   install                              安装 yc 命令到系统
   uninstall                            卸载 yc 命令
 
@@ -1164,6 +1492,8 @@ options:
   yc provider-alternatives 5          # 查询提供商 5 的所有可用服务方案
   yc provider-selection 5             # 查询提供商 5 当前生效的服务方案
   yc set-provider-selection 5 12      # 设置提供商 5 的生效服务方案为 12
+  yc switch                           # 交互式切换服务方案（自动选择提供商）
+  yc switch 5                         # 切换提供商 5 的服务方案
   yc install                          # 安装 yc
   yc uninstall                        # 卸载 yc
   yc --help                           # 显示帮助信息
@@ -1231,6 +1561,10 @@ main() {
         set-provider-selection)
             load_config
             cmd_set_provider_selection "$2" "$3"
+            ;;
+        switch)
+            load_config
+            cmd_switch "$2"
             ;;
         *)
             echo -e "${RED}错误: 未知命令 '$1'${RESET}"
