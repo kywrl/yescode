@@ -628,7 +628,7 @@ display_provider_selection() {
 interactive_select_provider() {
     local providers_data=$1
 
-    echo -e "${CYAN}${BOLD}📋 选择要切换的提供商：${RESET}" >&2
+    echo -e "${CYAN}${BOLD}📋 选择要切换服务方案的提供商：${RESET}" >&2
     echo >&2
 
     # 解析并显示提供商列表
