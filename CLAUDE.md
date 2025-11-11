@@ -145,6 +145,35 @@ your-feature)
 3. **认证错误特殊处理**：返回码 2 + "AUTH_ERROR_401" 标记
 4. **用户友好错误信息**：所有错误输出到 stderr 并带彩色标记
 
+### 交互式命令实现
+
+`switch` 命令是一个交互式的提供商切换工具，展示了如何构建用户友好的交互流程：
+
+**特点：**
+- **两步交互**：先选择分组，再选择该分组的提供商
+- **智能标记**：自动显示 [当前] 和 （官方）标记
+- **支持直达**：可选参数 `provider_id` 跳过第一步
+- **并行加载**：同时获取可用提供商列表和当前选择
+
+**实现要点：**
+
+```bash
+# 1. 交互式选择函数返回格式化字符串
+interactive_select_provider() {
+    # 返回格式: "id|name"
+    echo "${provider_id}|${provider_name}"
+}
+
+# 2. 并行 API 调用提升性能
+api_get_provider_alternatives "$provider_id" > "$temp_file1" &
+api_get_provider_selection "$provider_id" > "$temp_file2" &
+wait  # 等待两个 API 调用完成
+
+# 3. 标记逻辑
+[[ "$alt_id" == "$current_alt_id" ]] && echo "[当前]"
+[[ "$is_self" == "true" ]] && echo "（官方）"
+```
+
 ## 测试和调试
 
 ### 手动测试流程
@@ -157,11 +186,15 @@ your-feature)
 yc balance
 yc providers
 
-# 3. 测试错误处理（使用无效 API Key）
+# 3. 测试交互式切换
+yc switch         # 完整交互流程
+yc switch 5       # 直接切换分组 5
+
+# 4. 测试错误处理（使用无效 API Key）
 rm ~/.yescode/config.json
 yc balance  # 应提示输入 API Key
 
-# 4. 测试卸载
+# 5. 测试卸载
 yc uninstall
 ```
 

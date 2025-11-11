@@ -40,6 +40,7 @@ yc uninstall
 - `yc provider-alternatives <id>` - 查询指定分组的所有可用提供商
 - `yc provider-selection <id>` - 查询指定分组的当前提供商
 - `yc set-provider-selection <id> <alt>` - 设置指定分组的提供商
+- `yc switch [id]` - **交互式切换提供商（推荐）**
 - `yc install` - 安装 yc 到系统
 - `yc uninstall` - 卸载 yc
 - `yc --help` - 显示帮助信息
@@ -134,6 +135,61 @@ yc set-provider-selection 5 12
 # 4. 确认切换成功
 yc provider-selection 5
 ```
+
+### 交互式切换（推荐）
+
+**`yc switch`** 命令提供了更便捷的交互式体验，无需记忆分组和提供商 ID：
+
+#### 完整交互流程
+
+```bash
+yc switch
+```
+
+**第一步：选择分组**
+```
+📋 选择要切换提供商的分组：
+
+  [1] Basic/Swift API Endpoint | ID: 5 | 来源: 订阅
+  [2] OpenAI | ID: 3 | 来源: 订阅
+  [3] GoogleAPI | ID: 7 | 来源: 订阅
+  [4] PAYGO APIs | ID: 9 | 费率: ×0.5 | 来源: 按需
+
+请输入分组序号 [1-4] (输入 q 退出): 2
+```
+
+**第二步：选择提供商**
+```
+📋 OpenAI 分组的可选提供商：
+
+  [1] [当前] OpenAI | 费率: ×0.1
+  [2] OpenAIBackup | 费率: ×0.2
+  [3] CodexTest （官方） | 费率: ×0.1
+  [4] OpenAIOffical | 费率: ×1
+
+请输入提供商序号 [1-4] (输入 q 退出): 3
+```
+
+**切换成功**
+```
+✓ 切换成功！
+
+OpenAI 的提供商已切换为：
+CodexTest | 费率: ×0.1
+```
+
+#### 直接指定分组
+
+如果你已知道分组 ID，可以直接跳到第二步：
+
+```bash
+yc switch 3    # 直接切换分组 3 的提供商
+```
+
+**特点说明：**
+- **[当前]** 标记：显示当前正在使用的提供商
+- **（官方）** 标记：显示官方原始方案
+- 支持随时输入 `q` 退出
 
 ## 扩展开发
 
