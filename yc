@@ -739,14 +739,16 @@ interactive_select_alternative() {
         alternative_ids[$i]=$alt_id
         alternative_names[$i]=$display_name
 
-        # 判断是否为当前方案或默认方案
+        # 判断是否为当前方案或官方方案
         local prefix_mark=""
         local suffix_mark=""
 
         if [[ "$alt_id" == "$current_alt_id" ]]; then
             prefix_mark="${GREEN}${BOLD}[当前]${RESET} "
-        elif [[ "$is_self" == "true" ]]; then
-            suffix_mark=" ${YELLOW}(默认)${RESET}"
+        fi
+
+        if [[ "$is_self" == "true" ]]; then
+            suffix_mark=" ${YELLOW}(官方)${RESET}"
         fi
 
         # 显示选项
