@@ -38,7 +38,6 @@ prompt_api_key() {
     mkdir -p "$config_dir"
 
     # 提示用户输入
-    echo
     read -p "请输入您的 API Key: " api_key
 
     # 验证输入
@@ -190,7 +189,6 @@ auto_install_dependency() {
         return 1
     fi
 
-    echo
     read -p "是否自动安装 $dep? (y/n): " -r
 
     if [[ ! $REPLY =~ ^[Yy]$ ]]; then
@@ -973,16 +971,34 @@ cmd_set_provider_selection() {
 }
 
 cmd_uninstall() {
+    # 检测是否从项目目录运行（./yc 或相对路径）
+    if [[ "$0" == ./* || "$0" == */* ]] && command -v yc &> /dev/null; then
+        # 从项目目录运行，但系统中有安装的 yc 命令
+        local installed_yc=$(which yc 2>/dev/null)
+        local current_script=$(realpath "$0" 2>/dev/null || readlink -f "$0" 2>/dev/null || echo "$0")
+
+        # 如果两者不同，说明用户在项目目录运行，但系统有安装的版本
+        if [[ "$installed_yc" != "$current_script" ]]; then
+            echo -e "${YELLOW}检测到您正在项目目录中运行此脚本${RESET}"
+            echo -e "要卸载系统安装的 yc 命令，请直接运行："
+            echo -e "  ${WHITE}${BOLD}yc uninstall${RESET}"
+            echo
+            echo -e "系统安装路径: ${CYAN}$installed_yc${RESET}"
+            echo -e "当前脚本路径: ${CYAN}$current_script${RESET}"
+            exit 1
+        fi
+    fi
+
     # 获取 yc 命令的实际路径
     local yc_path=""
 
-    # 方法1：如果是通过安装的命令运行，使用 which 查找
+    # 优先查找系统安装的 yc 命令
     if command -v yc &> /dev/null; then
         yc_path=$(which yc)
     fi
 
-    # 方法2：如果是直接运行脚本，使用 $0
-    if [[ -z "$yc_path" || "$yc_path" == *"/"* ]]; then
+    # 如果没找到，使用当前脚本路径
+    if [[ -z "$yc_path" ]]; then
         yc_path=$(realpath "$0" 2>/dev/null || readlink -f "$0" 2>/dev/null || echo "$0")
     fi
 
@@ -996,7 +1012,6 @@ cmd_uninstall() {
     # 询问是否删除配置文件
     local delete_config=false
     if [[ -f "$HOME/.yescode/config.json" ]]; then
-        echo
         read -p "是否同时删除配置文件? (y/n): " -r
         if [[ $REPLY =~ ^[Yy]$ ]]; then
             delete_config=true
@@ -1107,8 +1122,19 @@ cmd_install() {
 
     if [ ! -f "$config_file" ]; then
         mkdir -p "$config_dir"
-        echo
         read -p "配置 API Key: " api_key
+
+        # 验证输入
+        if [[ -z "$api_key" ]]; then
+            echo -e "${RED}错误: API Key 不能为空${RESET}"
+            exit 1
+        fi
+
+        # 保存配置
+        echo "{\"api_key\": \"$api_key\"}" > "$config_file"
+        chmod 600 "$config_file"
+
+        echo -e "${GREEN}✓ 配置已保存${RESET}"
     fi
 
     # 检查 PATH
@@ -1118,6 +1144,10 @@ cmd_install() {
         echo "请添加到 ~/.bashrc 或 ~/.zshrc:"
         echo "  export PATH=\"\$HOME/.local/bin:\$PATH\""
     fi
+
+    # 显示帮助信息
+    echo
+    show_help
 }
 
 show_help() {
