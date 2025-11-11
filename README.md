@@ -84,6 +84,7 @@ PAYGO APIs
 
 ```
 ⠋ 正在查询可用服务方案...
+
 ✓ 获取可用服务方案成功
 
 🔄 提供商替代方案
@@ -103,6 +104,7 @@ PAYGO APIs
 
 4. OpenAIOffical
    ID: 16  |  类型: openai  |  费率: ×1
+
 ```
 
 ### 查询提供商当前生效的服务方案
@@ -111,9 +113,11 @@ PAYGO APIs
 
 ```
 ⠋ 正在查询当前生效的服务方案...
+
 提供商 3 当前生效的服务方案：OpenAI
   ID: 3  |  类型: openai  |  费率: ×0.1
   描述: OpenAI provider (migrated from Admin)
+
 ```
 
 ### 设置提供商的生效服务方案
@@ -122,11 +126,13 @@ PAYGO APIs
 
 ```
 ⠋ 正在设置生效的服务方案...
+
 ✓ 服务方案设置成功
 
 提供商 ID：5
 已切换到：YesCodeTest
   ID: 12  |  类型: claude  |  费率: ×0.1
+
 ```
 
 **典型使用流程：**

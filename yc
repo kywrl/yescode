@@ -744,8 +744,6 @@ cmd_provider_alternatives() {
         exit 1
     fi
 
-    echo
-
     local alternatives_data
     local exit_code
     local temp_file=$(mktemp)
@@ -795,8 +793,9 @@ cmd_provider_alternatives() {
 
     # 检查最终结果
     if [[ $exit_code -eq 0 && -n "$alternatives_data" && "$alternatives_data" != "AUTH_ERROR_401" ]]; then
-        echo -e "${GREEN}✓${RESET} 获取可用服务方案成功\n"
+        echo -e "\n${GREEN}✓${RESET} 获取可用服务方案成功\n"
         display_provider_alternatives "$alternatives_data"
+        echo
     else
         echo -e "${RED}✗ 获取可用服务方案失败${RESET}"
         exit 1
@@ -811,8 +810,6 @@ cmd_provider_selection() {
         echo "用法: yc provider-selection <provider_id>"
         exit 1
     fi
-
-    echo
 
     local selection_data
     local exit_code
@@ -863,7 +860,9 @@ cmd_provider_selection() {
 
     # 检查最终结果
     if [[ $exit_code -eq 0 && -n "$selection_data" && "$selection_data" != "AUTH_ERROR_401" ]]; then
+        echo
         display_provider_selection "$selection_data"
+        echo
     else
         echo -e "${RED}✗ 获取当前生效的服务方案失败${RESET}"
         exit 1
@@ -885,8 +884,6 @@ cmd_set_provider_selection() {
         echo "用法: yc set-provider-selection <provider_id> <alternative_id>"
         exit 1
     fi
-
-    echo
 
     local result_data
     local exit_code
@@ -937,7 +934,7 @@ cmd_set_provider_selection() {
 
     # 检查最终结果
     if [[ $exit_code -eq 0 && -n "$result_data" && "$result_data" != "AUTH_ERROR_401" ]]; then
-        echo -e "${GREEN}✓${RESET} 服务方案设置成功\n"
+        echo -e "\n${GREEN}✓${RESET} 服务方案设置成功\n"
 
         # 提取并显示选择信息
         local selected_alt=$(echo "$result_data" | jq -r '.data.selected_alternative')
