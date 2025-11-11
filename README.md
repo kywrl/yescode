@@ -91,17 +91,13 @@ PAYGO APIs
 
 可用替代方案 (4)：
 
-1. OpenAIBackup
-   ID: 9  |  类型: openai  |  费率: ×0.2
+1. ID: 9 | OpenAIBackup | 费率: ×0.2 | 类型: openai
 
-2. CodexTest
-   ID: 11  |  类型: openai  |  费率: ×0.1
+2. ID: 11 | CodexTest | 费率: ×0.1 | 类型: openai
 
-3. YesCodeTest(Codex)
-   ID: 14  |  类型: openai  |  费率: ×0.1
+3. ID: 14 | YesCodeTest(Codex) | 费率: ×0.1 | 类型: openai
 
-4. OpenAIOffical
-   ID: 16  |  类型: openai  |  费率: ×1
+4. ID: 16 | OpenAIOffical | 费率: ×1 | 类型: openai
 
 ```
 
