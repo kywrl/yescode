@@ -559,6 +559,7 @@ display_providers_info() {
 
 display_provider_alternatives() {
     local data=$1
+    local provider_id=$2
 
     # 检查是否有数据
     local data_count=$(echo "$data" | jq '.data | length')
@@ -569,18 +570,8 @@ display_provider_alternatives() {
         return 1
     fi
 
-    # 查找原提供商（is_self = true）
-    local original_item=$(echo "$data" | jq -r '.data[] | select(.is_self == true)')
-
-    if [[ -z "$original_item" || "$original_item" == "null" ]]; then
-        echo -e "${RED}错误: 无法找到原提供商信息${RESET}"
-        return 1
-    fi
-
-    local original_name=$(echo "$original_item" | jq -r '.alternative.display_name')
-
     # 显示标题
-    echo -e "${CYAN}${BOLD}服务商 ${original_name} 可用服务方案：${RESET}"
+    echo -e "${CYAN}${BOLD}提供商 ${provider_id} 可用服务方案：${RESET}"
     echo
 
     # 遍历所有方案（包括原方案和替代方案）
@@ -811,7 +802,7 @@ cmd_provider_alternatives() {
     # 检查最终结果
     if [[ $exit_code -eq 0 && -n "$alternatives_data" && "$alternatives_data" != "AUTH_ERROR_401" ]]; then
         echo
-        display_provider_alternatives "$alternatives_data"
+        display_provider_alternatives "$alternatives_data" "$provider_id"
         echo
     else
         echo -e "${RED}✗ 获取可用服务方案失败${RESET}"
