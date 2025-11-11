@@ -644,13 +644,8 @@ display_provider_selection() {
     local description=$(echo "$selected_alt" | jq -r '.description')
 
     # 优化输出格式
-    echo -e "提供商 ${BLUE}${provider_id}${RESET} 当前生效的服务方案：${GREEN}${BOLD}${display_name}${RESET}"
-    echo -e "  ID: ${BLUE}${selected_alt_id}${RESET}  |  类型: ${type}  |  费率: ${MAGENTA}×${rate}${RESET}"
-
-    # 如果有描述，显示描述
-    if [[ -n "$description" && "$description" != "null" && "$description" != "" ]]; then
-        echo -e "  描述: ${description}"
-    fi
+    echo -e "提供商 ${BLUE}${provider_id}${RESET} 当前生效的服务方案："
+    echo -e "ID: ${BLUE}${selected_alt_id}${RESET} | ${GREEN}${BOLD}${display_name}${RESET} | 费率: ${MAGENTA}×${rate}${RESET} | 类型: ${type}"
 }
 
 # ============================================================

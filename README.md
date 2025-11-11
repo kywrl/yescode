@@ -114,9 +114,8 @@ PAYGO APIs
 ```
 ⠋ 正在查询当前生效的服务方案...
 
-提供商 3 当前生效的服务方案：OpenAI
-  ID: 3  |  类型: openai  |  费率: ×0.1
-  描述: OpenAI provider (migrated from Admin)
+提供商 3 当前生效的服务方案：
+ID: 3 | OpenAI | 费率: ×0.1 | 类型: openai
 
 ```
 
