@@ -280,6 +280,150 @@ api_get_providers() {
     echo "$body"
 }
 
+api_get_provider_alternatives() {
+    local provider_id=$1
+
+    if [[ -z "$provider_id" ]]; then
+        echo -e "${RED}错误: provider_id 不能为空${RESET}" >&2
+        return 1
+    fi
+
+    # 获取指定提供商提供的所有可用服务方案（包括原方案和替代方案）
+    local url="${API_BASE_URL}/api/v1/user/provider-alternatives/${provider_id}"
+
+    # 使用 curl 发送请求
+    local response=$(curl -s -w "\n%{http_code}" \
+        -X GET \
+        -H "accept: application/json" \
+        -H "X-API-Key: ${API_KEY}" \
+        --connect-timeout 10 \
+        --max-time 30 \
+        "$url" 2>&1)
+
+    if [[ $? -ne 0 ]]; then
+        echo -e "${RED}错误: 请求失败${RESET}" >&2
+        return 1
+    fi
+
+    # 分离响应体和状态码
+    local http_code=$(echo "$response" | tail -n1)
+    local body=$(echo "$response" | sed '$d')
+
+    if [[ "$http_code" == "401" ]]; then
+        # 返回特殊标记表示认证失败
+        echo "AUTH_ERROR_401"
+        return 2
+    fi
+
+    if [[ "$http_code" != "200" ]]; then
+        echo -e "${RED}获取替代提供商失败: HTTP $http_code${RESET}" >&2
+        echo "响应内容: $body" >&2
+        return 1
+    fi
+
+    echo "$body"
+}
+
+api_get_provider_selection() {
+    local provider_id=$1
+
+    if [[ -z "$provider_id" ]]; then
+        echo -e "${RED}错误: provider_id 不能为空${RESET}" >&2
+        return 1
+    fi
+
+    # 获取指定提供商当前生效的服务方案
+    local url="${API_BASE_URL}/api/v1/user/provider-alternatives/${provider_id}/selection"
+
+    # 使用 curl 发送请求
+    local response=$(curl -s -w "\n%{http_code}" \
+        -X GET \
+        -H "accept: application/json" \
+        -H "X-API-Key: ${API_KEY}" \
+        --connect-timeout 10 \
+        --max-time 30 \
+        "$url" 2>&1)
+
+    if [[ $? -ne 0 ]]; then
+        echo -e "${RED}错误: 请求失败${RESET}" >&2
+        return 1
+    fi
+
+    # 分离响应体和状态码
+    local http_code=$(echo "$response" | tail -n1)
+    local body=$(echo "$response" | sed '$d')
+
+    if [[ "$http_code" == "401" ]]; then
+        # 返回特殊标记表示认证失败
+        echo "AUTH_ERROR_401"
+        return 2
+    fi
+
+    if [[ "$http_code" != "200" ]]; then
+        echo -e "${RED}获取当前选择失败: HTTP $http_code${RESET}" >&2
+        echo "响应内容: $body" >&2
+        return 1
+    fi
+
+    echo "$body"
+}
+
+api_set_provider_selection() {
+    local provider_id=$1
+    local selected_alternative_id=$2
+
+    if [[ -z "$provider_id" ]]; then
+        echo -e "${RED}错误: provider_id 不能为空${RESET}" >&2
+        return 1
+    fi
+
+    if [[ -z "$selected_alternative_id" ]]; then
+        echo -e "${RED}错误: selected_alternative_id 不能为空${RESET}" >&2
+        return 1
+    fi
+
+    # 设置指定提供商的生效服务方案
+    # 参数: provider_id - 提供商ID, selected_alternative_id - 要设置的服务方案ID
+    local url="${API_BASE_URL}/api/v1/user/provider-alternatives/${provider_id}/selection"
+
+    # 构造 JSON 请求体
+    local json_data="{\"selected_alternative_id\": ${selected_alternative_id}}"
+
+    # 使用 curl 发送 PUT 请求
+    local response=$(curl -s -w "\n%{http_code}" \
+        -X PUT \
+        -H "accept: application/json" \
+        -H "Content-Type: application/json" \
+        -H "X-API-Key: ${API_KEY}" \
+        -d "$json_data" \
+        --connect-timeout 10 \
+        --max-time 30 \
+        "$url" 2>&1)
+
+    if [[ $? -ne 0 ]]; then
+        echo -e "${RED}错误: 请求失败${RESET}" >&2
+        return 1
+    fi
+
+    # 分离响应体和状态码
+    local http_code=$(echo "$response" | tail -n1)
+    local body=$(echo "$response" | sed '$d')
+
+    if [[ "$http_code" == "401" ]]; then
+        # 返回特殊标记表示认证失败
+        echo "AUTH_ERROR_401"
+        return 2
+    fi
+
+    if [[ "$http_code" != "200" ]]; then
+        echo -e "${RED}设置选择失败: HTTP $http_code${RESET}" >&2
+        echo "响应内容: $body" >&2
+        return 1
+    fi
+
+    echo "$body"
+}
+
 # ============================================================
 # 显示余额信息
 # ============================================================
@@ -361,6 +505,7 @@ display_providers_info() {
     for ((i=0; i<$providers_count; i++)); do
         local provider_data=$(echo "$data" | jq -r ".providers[$i]")
 
+        local provider_id=$(echo "$provider_data" | jq -r '.provider.id')
         local display_name=$(echo "$provider_data" | jq -r '.provider.display_name')
         local type=$(echo "$provider_data" | jq -r '.provider.type')
         local rate=$(echo "$provider_data" | jq -r '.rate_multiplier')
@@ -383,9 +528,110 @@ display_providers_info() {
 
         # 显示提供商信息
         echo -e "${WHITE}${BOLD}${display_name}${RESET}${default_mark}"
-        echo -e "  类型: ${type}  |  费率: ${MAGENTA}×${rate}${RESET}  |  来源: ${source_text}"
+        echo -e "  ID: ${BLUE}${provider_id}${RESET}  |  类型: ${type}  |  费率: ${MAGENTA}×${rate}${RESET}  |  来源: ${source_text}"
         echo
     done
+}
+
+display_provider_alternatives() {
+    local data=$1
+
+    # 检查是否有数据
+    local data_count=$(echo "$data" | jq '.data | length')
+    if [[ "$data_count" == "0" || "$data_count" == "null" ]]; then
+        echo -e "${RED}错误: 提供商不存在${RESET}"
+        echo
+        echo -e "${YELLOW}提示: 请先运行 ${WHITE}yc providers${YELLOW} 查看可用的提供商 ID${RESET}"
+        return 1
+    fi
+
+    # 查找原提供商（is_self = true）
+    local original_item=$(echo "$data" | jq -r '.data[] | select(.is_self == true)')
+
+    if [[ -z "$original_item" || "$original_item" == "null" ]]; then
+        echo -e "${RED}错误: 无法找到原提供商信息${RESET}"
+        return 1
+    fi
+
+    local original_name=$(echo "$original_item" | jq -r '.alternative.display_name')
+    local original_type=$(echo "$original_item" | jq -r '.alternative.type')
+    local original_id=$(echo "$original_item" | jq -r '.alternative.id')
+
+    # 显示标题
+    echo -e "${CYAN}${BOLD}🔄 提供商替代方案${RESET}"
+    echo
+    echo -e "${WHITE}${BOLD}原提供商：${RESET}${original_name} ${BLUE}(${original_type}, ID: ${original_id})${RESET}"
+    echo
+
+    # 提取替代方案（is_self = false）
+    local alternatives=$(echo "$data" | jq -r '[.data[] | select(.is_self == false)]')
+    local alternatives_count=$(echo "$alternatives" | jq '. | length')
+
+    if [[ "$alternatives_count" == "0" ]]; then
+        echo -e "${YELLOW}暂无可用的替代方案${RESET}"
+        return
+    fi
+
+    echo -e "${CYAN}${BOLD}可用替代方案 (${alternatives_count})：${RESET}"
+    echo
+
+    for ((i=0; i<$alternatives_count; i++)); do
+        local alt_data=$(echo "$alternatives" | jq -r ".[$i]")
+
+        local provider_id=$(echo "$alt_data" | jq -r '.alternative.id')
+        local display_name=$(echo "$alt_data" | jq -r '.alternative.display_name')
+        local type=$(echo "$alt_data" | jq -r '.alternative.type')
+        local rate=$(echo "$alt_data" | jq -r '.alternative.rate_multiplier')
+        local description=$(echo "$alt_data" | jq -r '.alternative.description')
+
+        # 显示替代方案信息
+        echo -e "${WHITE}${BOLD}$((i+1)). ${display_name}${RESET}"
+        echo -e "   ID: ${BLUE}${provider_id}${RESET}  |  类型: ${type}  |  费率: ${MAGENTA}×${rate}${RESET}"
+
+        # 如果有描述，显示描述
+        if [[ -n "$description" && "$description" != "null" && "$description" != "" ]]; then
+            echo -e "   描述: ${description}"
+        fi
+        echo
+    done
+}
+
+display_provider_selection() {
+    local data=$1
+
+    # 检查是否有数据
+    local selection_data=$(echo "$data" | jq -r '.data')
+    if [[ "$selection_data" == "null" ]]; then
+        echo -e "${RED}错误: 提供商不存在${RESET}"
+        echo
+        echo -e "${YELLOW}提示: 请先运行 ${WHITE}yc providers${YELLOW} 查看可用的提供商 ID${RESET}"
+        return 1
+    fi
+
+    local provider_id=$(echo "$selection_data" | jq -r '.provider_id')
+    local selected_alt_id=$(echo "$selection_data" | jq -r '.selected_alternative_id')
+    local selected_alt=$(echo "$selection_data" | jq -r '.selected_alternative')
+
+    local display_name=$(echo "$selected_alt" | jq -r '.display_name')
+    local type=$(echo "$selected_alt" | jq -r '.type')
+    local rate=$(echo "$selected_alt" | jq -r '.rate_multiplier')
+    local description=$(echo "$selected_alt" | jq -r '.description')
+
+    # 显示标题
+    echo -e "${CYAN}${BOLD}✓ 当前选择的提供商${RESET}"
+    echo
+    echo -e "${WHITE}${BOLD}提供商 ID：${RESET}${BLUE}${provider_id}${RESET}"
+    echo
+
+    # 显示当前选择
+    echo -e "${GREEN}${BOLD}当前使用：${RESET}${WHITE}${BOLD}${display_name}${RESET}"
+    echo -e "  ID: ${BLUE}${selected_alt_id}${RESET}  |  类型: ${type}  |  费率: ${MAGENTA}×${rate}${RESET}"
+
+    # 如果有描述，显示描述
+    if [[ -n "$description" && "$description" != "null" && "$description" != "" ]]; then
+        echo -e "  描述: ${description}"
+    fi
+    echo
 }
 
 # ============================================================
@@ -466,6 +712,165 @@ cmd_providers() {
         display_providers_info "$providers_data"
     else
         echo -e "${RED}✗ 获取提供商信息失败${RESET}"
+        exit 1
+    fi
+}
+
+cmd_provider_alternatives() {
+    local provider_id=$1
+
+    if [[ -z "$provider_id" ]]; then
+        echo -e "${RED}错误: 请提供 provider_id${RESET}"
+        echo "用法: yc provider-alternatives <provider_id>"
+        exit 1
+    fi
+
+    echo
+    echo "正在查询可用服务方案..."
+
+    local alternatives_data
+    local exit_code
+
+    # 临时禁用 set -e，允许捕获非零退出码
+    set +e
+    alternatives_data=$(api_get_provider_alternatives "$provider_id")
+    exit_code=$?
+    set -e
+
+    # 如果是认证错误（401），提示用户重新输入 API Key
+    if [[ $exit_code -eq 2 && "$alternatives_data" == "AUTH_ERROR_401" ]]; then
+        echo -e "${RED}✗ API Key 无效（401 认证失败）${RESET}"
+        prompt_api_key false  # 不显示重复提示信息
+
+        # 重新加载配置
+        load_config
+
+        # 重试请求
+        echo "正在重新查询可用服务方案..."
+        set +e
+        alternatives_data=$(api_get_provider_alternatives "$provider_id")
+        exit_code=$?
+        set -e
+    fi
+
+    # 检查最终结果
+    if [[ $exit_code -eq 0 && -n "$alternatives_data" && "$alternatives_data" != "AUTH_ERROR_401" ]]; then
+        echo -e "✓ 获取可用服务方案成功!\n"
+        display_provider_alternatives "$alternatives_data"
+    else
+        echo -e "${RED}✗ 获取可用服务方案失败${RESET}"
+        exit 1
+    fi
+}
+
+cmd_provider_selection() {
+    local provider_id=$1
+
+    if [[ -z "$provider_id" ]]; then
+        echo -e "${RED}错误: 请提供 provider_id${RESET}"
+        echo "用法: yc provider-selection <provider_id>"
+        exit 1
+    fi
+
+    echo
+    echo "正在查询当前生效的服务方案..."
+
+    local selection_data
+    local exit_code
+
+    # 临时禁用 set -e，允许捕获非零退出码
+    set +e
+    selection_data=$(api_get_provider_selection "$provider_id")
+    exit_code=$?
+    set -e
+
+    # 如果是认证错误（401），提示用户重新输入 API Key
+    if [[ $exit_code -eq 2 && "$selection_data" == "AUTH_ERROR_401" ]]; then
+        echo -e "${RED}✗ API Key 无效（401 认证失败）${RESET}"
+        prompt_api_key false  # 不显示重复提示信息
+
+        # 重新加载配置
+        load_config
+
+        # 重试请求
+        echo "正在重新查询当前生效的服务方案..."
+        set +e
+        selection_data=$(api_get_provider_selection "$provider_id")
+        exit_code=$?
+        set -e
+    fi
+
+    # 检查最终结果
+    if [[ $exit_code -eq 0 && -n "$selection_data" && "$selection_data" != "AUTH_ERROR_401" ]]; then
+        echo -e "✓ 获取当前生效的服务方案成功!\n"
+        display_provider_selection "$selection_data"
+    else
+        echo -e "${RED}✗ 获取当前生效的服务方案失败${RESET}"
+        exit 1
+    fi
+}
+
+cmd_set_provider_selection() {
+    local provider_id=$1
+    local selected_alternative_id=$2
+
+    if [[ -z "$provider_id" ]]; then
+        echo -e "${RED}错误: 请提供 provider_id${RESET}"
+        echo "用法: yc set-provider-selection <provider_id> <alternative_id>"
+        exit 1
+    fi
+
+    if [[ -z "$selected_alternative_id" ]]; then
+        echo -e "${RED}错误: 请提供 alternative_id${RESET}"
+        echo "用法: yc set-provider-selection <provider_id> <alternative_id>"
+        exit 1
+    fi
+
+    echo
+    echo "正在设置生效的服务方案..."
+
+    local result_data
+    local exit_code
+
+    # 临时禁用 set -e，允许捕获非零退出码
+    set +e
+    result_data=$(api_set_provider_selection "$provider_id" "$selected_alternative_id")
+    exit_code=$?
+    set -e
+
+    # 如果是认证错误（401），提示用户重新输入 API Key
+    if [[ $exit_code -eq 2 && "$result_data" == "AUTH_ERROR_401" ]]; then
+        echo -e "${RED}✗ API Key 无效（401 认证失败）${RESET}"
+        prompt_api_key false  # 不显示重复提示信息
+
+        # 重新加载配置
+        load_config
+
+        # 重试请求
+        echo "正在重新设置生效的服务方案..."
+        set +e
+        result_data=$(api_set_provider_selection "$provider_id" "$selected_alternative_id")
+        exit_code=$?
+        set -e
+    fi
+
+    # 检查最终结果
+    if [[ $exit_code -eq 0 && -n "$result_data" && "$result_data" != "AUTH_ERROR_401" ]]; then
+        echo -e "${GREEN}✓ 服务方案设置成功!${RESET}\n"
+
+        # 提取并显示选择信息
+        local selected_alt=$(echo "$result_data" | jq -r '.data.selected_alternative')
+        local display_name=$(echo "$selected_alt" | jq -r '.display_name')
+        local alt_id=$(echo "$selected_alt" | jq -r '.id')
+        local type=$(echo "$selected_alt" | jq -r '.type')
+        local rate=$(echo "$selected_alt" | jq -r '.rate_multiplier')
+
+        echo -e "${WHITE}${BOLD}提供商 ID：${RESET}${BLUE}${provider_id}${RESET}"
+        echo -e "${WHITE}${BOLD}已切换到：${RESET}${display_name}"
+        echo -e "  ID: ${BLUE}${alt_id}${RESET}  |  类型: ${type}  |  费率: ${MAGENTA}×${rate}${RESET}"
+        echo
+    else
+        echo -e "${RED}✗ 服务方案设置失败${RESET}"
         exit 1
     fi
 }
@@ -620,15 +1025,18 @@ cmd_install() {
 
 show_help() {
     cat << EOF
-usage: yc [-h] {balance,providers,install,uninstall}
+usage: yc [-h] {balance,providers,provider-alternatives,provider-selection,set-provider-selection,install,uninstall}
 
 YesCode API 调用工具 - 查询余额、提供商等功能
 
 positional arguments:
-  balance     查询账户余额和订阅信息
-  providers   查询可用的 AI 提供商
-  install     安装 yc 命令到系统
-  uninstall   卸载 yc 命令
+  balance                              查询账户余额和订阅信息
+  providers                            查询可用的 AI 提供商
+  provider-alternatives <id>           查询指定提供商提供的所有可用服务方案
+  provider-selection <id>              查询指定提供商当前生效的服务方案
+  set-provider-selection <id> <alt>    设置指定提供商的生效服务方案
+  install                              安装 yc 命令到系统
+  uninstall                            卸载 yc 命令
 
 options:
   -h, --help  显示帮助信息
@@ -636,6 +1044,9 @@ options:
 使用示例:
   yc balance                          # 查询余额
   yc providers                        # 查询提供商
+  yc provider-alternatives 5          # 查询提供商 5 的所有可用服务方案
+  yc provider-selection 5             # 查询提供商 5 当前生效的服务方案
+  yc set-provider-selection 5 12      # 设置提供商 5 的生效服务方案为 12
   yc install                          # 安装 yc
   yc uninstall                        # 卸载 yc
   yc --help                           # 显示帮助信息
@@ -691,6 +1102,18 @@ main() {
         providers)
             load_config
             cmd_providers
+            ;;
+        provider-alternatives)
+            load_config
+            cmd_provider_alternatives "$2"
+            ;;
+        provider-selection)
+            load_config
+            cmd_provider_selection "$2"
+            ;;
+        set-provider-selection)
+            load_config
+            cmd_set_provider_selection "$2" "$3"
             ;;
         *)
             echo -e "${RED}错误: 未知命令 '$1'${RESET}"
