@@ -84,6 +84,32 @@ load_config() {
 }
 
 # ============================================================
+# Loading 动画函数
+# ============================================================
+
+show_loading() {
+    local message="$1"
+    local pid=$2
+    local spin='⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏'
+    local i=0
+
+    # 隐藏光标
+    tput civis
+
+    while kill -0 $pid 2>/dev/null; do
+        i=$(( (i+1) % 10 ))
+        printf "\r${CYAN}${spin:$i:1}${RESET} %s" "$message"
+        sleep 0.1
+    done
+
+    # 清除loading行
+    printf "\r\033[K"
+
+    # 恢复光标
+    tput cnorm
+}
+
+# ============================================================
 # 颜色工具函数
 # ============================================================
 
@@ -617,21 +643,14 @@ display_provider_selection() {
     local rate=$(echo "$selected_alt" | jq -r '.rate_multiplier')
     local description=$(echo "$selected_alt" | jq -r '.description')
 
-    # 显示标题
-    echo -e "${CYAN}${BOLD}✓ 当前选择的提供商${RESET}"
-    echo
-    echo -e "${WHITE}${BOLD}提供商 ID：${RESET}${BLUE}${provider_id}${RESET}"
-    echo
-
-    # 显示当前选择
-    echo -e "${GREEN}${BOLD}当前使用：${RESET}${WHITE}${BOLD}${display_name}${RESET}"
+    # 优化输出格式
+    echo -e "提供商 ${BLUE}${provider_id}${RESET} 当前生效的服务方案：${GREEN}${BOLD}${display_name}${RESET}"
     echo -e "  ID: ${BLUE}${selected_alt_id}${RESET}  |  类型: ${type}  |  费率: ${MAGENTA}×${rate}${RESET}"
 
     # 如果有描述，显示描述
     if [[ -n "$description" && "$description" != "null" && "$description" != "" ]]; then
         echo -e "  描述: ${description}"
     fi
-    echo
 }
 
 # ============================================================
@@ -726,15 +745,31 @@ cmd_provider_alternatives() {
     fi
 
     echo
-    echo "正在查询可用服务方案..."
 
     local alternatives_data
     local exit_code
+    local temp_file=$(mktemp)
 
     # 临时禁用 set -e，允许捕获非零退出码
     set +e
-    alternatives_data=$(api_get_provider_alternatives "$provider_id")
-    exit_code=$?
+
+    # 在后台执行 API 调用
+    (api_get_provider_alternatives "$provider_id" > "$temp_file" 2>&1; echo $? > "${temp_file}.exit") &
+    local api_pid=$!
+
+    # 显示 loading 动画
+    show_loading "正在查询可用服务方案..." $api_pid
+
+    # 等待后台任务完成
+    wait $api_pid
+
+    # 读取结果
+    alternatives_data=$(cat "$temp_file")
+    exit_code=$(cat "${temp_file}.exit")
+
+    # 清理临时文件
+    rm -f "$temp_file" "${temp_file}.exit"
+
     set -e
 
     # 如果是认证错误（401），提示用户重新输入 API Key
@@ -745,17 +780,22 @@ cmd_provider_alternatives() {
         # 重新加载配置
         load_config
 
-        # 重试请求
-        echo "正在重新查询可用服务方案..."
+        # 重试请求（带loading）
         set +e
-        alternatives_data=$(api_get_provider_alternatives "$provider_id")
-        exit_code=$?
+        temp_file=$(mktemp)
+        (api_get_provider_alternatives "$provider_id" > "$temp_file" 2>&1; echo $? > "${temp_file}.exit") &
+        api_pid=$!
+        show_loading "正在重新查询可用服务方案..." $api_pid
+        wait $api_pid
+        alternatives_data=$(cat "$temp_file")
+        exit_code=$(cat "${temp_file}.exit")
+        rm -f "$temp_file" "${temp_file}.exit"
         set -e
     fi
 
     # 检查最终结果
     if [[ $exit_code -eq 0 && -n "$alternatives_data" && "$alternatives_data" != "AUTH_ERROR_401" ]]; then
-        echo -e "✓ 获取可用服务方案成功!\n"
+        echo -e "${GREEN}✓${RESET} 获取可用服务方案成功\n"
         display_provider_alternatives "$alternatives_data"
     else
         echo -e "${RED}✗ 获取可用服务方案失败${RESET}"
@@ -773,15 +813,31 @@ cmd_provider_selection() {
     fi
 
     echo
-    echo "正在查询当前生效的服务方案..."
 
     local selection_data
     local exit_code
+    local temp_file=$(mktemp)
 
     # 临时禁用 set -e，允许捕获非零退出码
     set +e
-    selection_data=$(api_get_provider_selection "$provider_id")
-    exit_code=$?
+
+    # 在后台执行 API 调用
+    (api_get_provider_selection "$provider_id" > "$temp_file" 2>&1; echo $? > "${temp_file}.exit") &
+    local api_pid=$!
+
+    # 显示 loading 动画
+    show_loading "正在查询当前生效的服务方案..." $api_pid
+
+    # 等待后台任务完成
+    wait $api_pid
+
+    # 读取结果
+    selection_data=$(cat "$temp_file")
+    exit_code=$(cat "${temp_file}.exit")
+
+    # 清理临时文件
+    rm -f "$temp_file" "${temp_file}.exit"
+
     set -e
 
     # 如果是认证错误（401），提示用户重新输入 API Key
@@ -792,17 +848,21 @@ cmd_provider_selection() {
         # 重新加载配置
         load_config
 
-        # 重试请求
-        echo "正在重新查询当前生效的服务方案..."
+        # 重试请求（带loading）
         set +e
-        selection_data=$(api_get_provider_selection "$provider_id")
-        exit_code=$?
+        temp_file=$(mktemp)
+        (api_get_provider_selection "$provider_id" > "$temp_file" 2>&1; echo $? > "${temp_file}.exit") &
+        api_pid=$!
+        show_loading "正在重新查询当前生效的服务方案..." $api_pid
+        wait $api_pid
+        selection_data=$(cat "$temp_file")
+        exit_code=$(cat "${temp_file}.exit")
+        rm -f "$temp_file" "${temp_file}.exit"
         set -e
     fi
 
     # 检查最终结果
     if [[ $exit_code -eq 0 && -n "$selection_data" && "$selection_data" != "AUTH_ERROR_401" ]]; then
-        echo -e "✓ 获取当前生效的服务方案成功!\n"
         display_provider_selection "$selection_data"
     else
         echo -e "${RED}✗ 获取当前生效的服务方案失败${RESET}"
@@ -827,15 +887,31 @@ cmd_set_provider_selection() {
     fi
 
     echo
-    echo "正在设置生效的服务方案..."
 
     local result_data
     local exit_code
+    local temp_file=$(mktemp)
 
     # 临时禁用 set -e，允许捕获非零退出码
     set +e
-    result_data=$(api_set_provider_selection "$provider_id" "$selected_alternative_id")
-    exit_code=$?
+
+    # 在后台执行 API 调用
+    (api_set_provider_selection "$provider_id" "$selected_alternative_id" > "$temp_file" 2>&1; echo $? > "${temp_file}.exit") &
+    local api_pid=$!
+
+    # 显示 loading 动画
+    show_loading "正在设置生效的服务方案..." $api_pid
+
+    # 等待后台任务完成
+    wait $api_pid
+
+    # 读取结果
+    result_data=$(cat "$temp_file")
+    exit_code=$(cat "${temp_file}.exit")
+
+    # 清理临时文件
+    rm -f "$temp_file" "${temp_file}.exit"
+
     set -e
 
     # 如果是认证错误（401），提示用户重新输入 API Key
@@ -846,17 +922,22 @@ cmd_set_provider_selection() {
         # 重新加载配置
         load_config
 
-        # 重试请求
-        echo "正在重新设置生效的服务方案..."
+        # 重试请求（带loading）
         set +e
-        result_data=$(api_set_provider_selection "$provider_id" "$selected_alternative_id")
-        exit_code=$?
+        temp_file=$(mktemp)
+        (api_set_provider_selection "$provider_id" "$selected_alternative_id" > "$temp_file" 2>&1; echo $? > "${temp_file}.exit") &
+        api_pid=$!
+        show_loading "正在重新设置生效的服务方案..." $api_pid
+        wait $api_pid
+        result_data=$(cat "$temp_file")
+        exit_code=$(cat "${temp_file}.exit")
+        rm -f "$temp_file" "${temp_file}.exit"
         set -e
     fi
 
     # 检查最终结果
     if [[ $exit_code -eq 0 && -n "$result_data" && "$result_data" != "AUTH_ERROR_401" ]]; then
-        echo -e "${GREEN}✓ 服务方案设置成功!${RESET}\n"
+        echo -e "${GREEN}✓${RESET} 服务方案设置成功\n"
 
         # 提取并显示选择信息
         local selected_alt=$(echo "$result_data" | jq -r '.data.selected_alternative')
