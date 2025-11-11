@@ -244,6 +244,42 @@ api_get_balance() {
     echo "$body"
 }
 
+api_get_providers() {
+    local url="${API_BASE_URL}/api/v1/user/available-providers"
+
+    # 使用 curl 发送请求
+    local response=$(curl -s -w "\n%{http_code}" \
+        -X GET \
+        -H "accept: application/json" \
+        -H "X-API-Key: ${API_KEY}" \
+        --connect-timeout 10 \
+        --max-time 30 \
+        "$url" 2>&1)
+
+    if [[ $? -ne 0 ]]; then
+        echo -e "${RED}错误: 请求失败${RESET}" >&2
+        return 1
+    fi
+
+    # 分离响应体和状态码
+    local http_code=$(echo "$response" | tail -n1)
+    local body=$(echo "$response" | sed '$d')
+
+    if [[ "$http_code" == "401" ]]; then
+        # 返回特殊标记表示认证失败
+        echo "AUTH_ERROR_401"
+        return 2
+    fi
+
+    if [[ "$http_code" != "200" ]]; then
+        echo -e "${RED}获取提供商信息失败: HTTP $http_code${RESET}" >&2
+        echo "响应内容: $body" >&2
+        return 1
+    fi
+
+    echo "$body"
+}
+
 # ============================================================
 # 显示余额信息
 # ============================================================
@@ -308,6 +344,50 @@ display_balance_info() {
     fi
 }
 
+display_providers_info() {
+    local data=$1
+
+    # 提取账户信息
+    local has_payg=$(echo "$data" | jq -r '.has_payg_balance')
+    local has_subscription=$(echo "$data" | jq -r '.has_subscription')
+
+    # 显示账户状态
+    echo -e "${CYAN}${BOLD}🔌 可用提供商${RESET}"
+    echo
+
+    # 使用 jq 解析 providers 数组
+    local providers_count=$(echo "$data" | jq '.providers | length')
+
+    for ((i=0; i<$providers_count; i++)); do
+        local provider_data=$(echo "$data" | jq -r ".providers[$i]")
+
+        local display_name=$(echo "$provider_data" | jq -r '.provider.display_name')
+        local type=$(echo "$provider_data" | jq -r '.provider.type')
+        local rate=$(echo "$provider_data" | jq -r '.rate_multiplier')
+        local is_default=$(echo "$provider_data" | jq -r '.is_default')
+        local source=$(echo "$provider_data" | jq -r '.source')
+
+        # 转换 source 为中文
+        local source_text=""
+        if [[ "$source" == "subscription" ]]; then
+            source_text="${CYAN}订阅${RESET}"
+        else
+            source_text="${YELLOW}按需${RESET}"
+        fi
+
+        # 显示默认标记
+        local default_mark=""
+        if [[ "$is_default" == "true" ]]; then
+            default_mark=" ${GREEN}[默认]${RESET}"
+        fi
+
+        # 显示提供商信息
+        echo -e "${WHITE}${BOLD}${display_name}${RESET}${default_mark}"
+        echo -e "  类型: ${type}  |  费率: ${MAGENTA}×${rate}${RESET}  |  来源: ${source_text}"
+        echo
+    done
+}
+
 # ============================================================
 # 命令处理
 # ============================================================
@@ -347,6 +427,45 @@ cmd_balance() {
         display_balance_info "$balance_data"
     else
         echo -e "${RED}✗ 获取余额失败${RESET}"
+        exit 1
+    fi
+}
+
+cmd_providers() {
+    echo
+    echo "正在查询提供商..."
+
+    local providers_data
+    local exit_code
+
+    # 临时禁用 set -e，允许捕获非零退出码
+    set +e
+    providers_data=$(api_get_providers)
+    exit_code=$?
+    set -e
+
+    # 如果是认证错误（401），提示用户重新输入 API Key
+    if [[ $exit_code -eq 2 && "$providers_data" == "AUTH_ERROR_401" ]]; then
+        echo -e "${RED}✗ API Key 无效（401 认证失败）${RESET}"
+        prompt_api_key false  # 不显示重复提示信息
+
+        # 重新加载配置
+        load_config
+
+        # 重试请求
+        echo "正在重新查询提供商..."
+        set +e
+        providers_data=$(api_get_providers)
+        exit_code=$?
+        set -e
+    fi
+
+    # 检查最终结果
+    if [[ $exit_code -eq 0 && -n "$providers_data" && "$providers_data" != "AUTH_ERROR_401" ]]; then
+        echo -e "✓ 获取提供商信息成功!\n"
+        display_providers_info "$providers_data"
+    else
+        echo -e "${RED}✗ 获取提供商信息失败${RESET}"
         exit 1
     fi
 }
@@ -501,12 +620,13 @@ cmd_install() {
 
 show_help() {
     cat << EOF
-usage: yc [-h] {balance,install,uninstall}
+usage: yc [-h] {balance,providers,install,uninstall}
 
-YesCode API 调用工具 - 查询余额等功能
+YesCode API 调用工具 - 查询余额、提供商等功能
 
 positional arguments:
   balance     查询账户余额和订阅信息
+  providers   查询可用的 AI 提供商
   install     安装 yc 命令到系统
   uninstall   卸载 yc 命令
 
@@ -515,6 +635,7 @@ options:
 
 使用示例:
   yc balance                          # 查询余额
+  yc providers                        # 查询提供商
   yc install                          # 安装 yc
   yc uninstall                        # 卸载 yc
   yc --help                           # 显示帮助信息
@@ -566,6 +687,10 @@ main() {
         balance)
             load_config
             cmd_balance
+            ;;
+        providers)
+            load_config
+            cmd_providers
             ;;
         *)
             echo -e "${RED}错误: 未知命令 '$1'${RESET}"

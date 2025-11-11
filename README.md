@@ -36,11 +36,14 @@ yc uninstall
 ## 命令说明
 
 - `yc balance` - 查询账户余额和订阅信息
+- `yc providers` - 查询可用的 AI 提供商
 - `yc install` - 安装 yc 到系统
 - `yc uninstall` - 卸载 yc
 - `yc --help` - 显示帮助信息
 
 ## 输出示例
+
+### 余额查询
 
 ```
 💰 余额信息
@@ -52,6 +55,24 @@ yc uninstall
 已消费：¥5.59 (5.6%)
 剩余额度：¥94.41 (94.4%)
 消费进度：[█░░░░░░░░░░░░░░░░░░░░░░░░░░░░░] 5.6%
+```
+
+### 提供商查询
+
+```
+🔌 可用提供商
+
+Basic/Swift API Endpoint [默认]
+  类型: claude  |  费率: ×0.8  |  来源: 订阅
+
+OpenAI [默认]
+  类型: openai  |  费率: ×0.1  |  来源: 订阅
+
+GoogleAPI [默认]
+  类型: google  |  费率: ×0.1  |  来源: 订阅
+
+PAYGO APIs
+  类型: claude  |  费率: ×0.5  |  来源: 按需
 ```
 
 ## 扩展开发
