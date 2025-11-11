@@ -1,0 +1,579 @@
+#!/usr/bin/env bash
+# YesCode CLI
+# 依赖: curl, jq
+
+set -e
+
+# ============================================================
+# 颜色定义
+# ============================================================
+
+# ANSI 颜色码
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[0;33m'
+BLUE='\033[0;34m'
+MAGENTA='\033[0;35m'
+CYAN='\033[0;36m'
+WHITE='\033[0;37m'
+BOLD='\033[1m'
+RESET='\033[0m'
+
+# ============================================================
+# 配置管理
+# ============================================================
+
+prompt_api_key() {
+    local show_message="${1:-true}"  # 默认显示提示信息
+    local config_dir="$HOME/.yescode"
+    local config_file="$config_dir/config.json"
+
+    if [[ "$show_message" == "true" ]]; then
+        echo
+        echo -e "${YELLOW}未配置 API Key${RESET}"
+        echo
+    fi
+
+    # 创建配置目录
+    mkdir -p "$config_dir"
+
+    # 提示用户输入
+    echo
+    read -p "请输入您的 API Key: " api_key
+
+    # 验证输入
+    if [[ -z "$api_key" ]]; then
+        echo -e "${RED}错误: API Key 不能为空${RESET}"
+        exit 1
+    fi
+
+    # 保存配置
+    echo "{\"api_key\": \"$api_key\"}" > "$config_file"
+    chmod 600 "$config_file"
+
+    echo -e "${GREEN}✓ 配置已保存到: $config_file${RESET}"
+    echo
+}
+
+load_config() {
+    local config_file="$HOME/.yescode/config.json"
+
+    # 如果配置文件不存在，提示用户输入
+    if [[ ! -f "$config_file" ]]; then
+        prompt_api_key
+    fi
+
+    # 使用 jq 读取 API Key
+    API_KEY=$(jq -r '.api_key' "$config_file" 2>/dev/null)
+
+    if [[ $? -ne 0 ]]; then
+        echo -e "${RED}错误: 配置文件格式错误${RESET}"
+        echo "请确保 $config_file 是有效的 JSON 格式"
+        exit 1
+    fi
+
+    # 如果 API Key 为空或 null，提示用户输入
+    if [[ -z "$API_KEY" || "$API_KEY" == "null" ]]; then
+        prompt_api_key
+        # 重新读取配置
+        API_KEY=$(jq -r '.api_key' "$config_file" 2>/dev/null)
+    fi
+
+    # 固定的 API Base URL
+    API_BASE_URL="https://co.yes.vg"
+}
+
+# ============================================================
+# 颜色工具函数
+# ============================================================
+
+get_balance_color() {
+    local balance=$1
+    local threshold_low=20
+    local threshold_medium=50
+
+    if (( $(echo "$balance < $threshold_low" | bc -l) )); then
+        echo "$RED"
+    elif (( $(echo "$balance < $threshold_medium" | bc -l) )); then
+        echo "$YELLOW"
+    else
+        echo "$GREEN"
+    fi
+}
+
+get_spending_color() {
+    local spent_percent=$1
+
+    if (( $(echo "$spent_percent >= 95" | bc -l) )); then
+        echo "$RED"
+    elif (( $(echo "$spent_percent >= 80" | bc -l) )); then
+        echo "$YELLOW"
+    else
+        echo "$GREEN"
+    fi
+}
+
+create_progress_bar() {
+    local current=$1
+    local total=$2
+    local width=30
+
+    if (( $(echo "$total == 0" | bc -l) )); then
+        local percent=0
+        local filled=0
+    else
+        local percent=$(echo "scale=1; ($current / $total) * 100" | bc)
+        local filled=$(echo "scale=0; ($current / $total) * $width" | bc)
+    fi
+
+    local empty=$((width - filled))
+    local bar=$(printf '█%.0s' $(seq 1 $filled))$(printf '░%.0s' $(seq 1 $empty))
+
+    local color=$(get_spending_color "$percent")
+    echo -e "[${color}${bar}${RESET}] ${color}${BOLD}${percent}%${RESET}"
+}
+
+# ============================================================
+# 系统检测与依赖安装
+# ============================================================
+
+detect_package_manager() {
+    # 检测系统的包管理器并返回安装命令
+    if command -v apt &> /dev/null; then
+        echo "apt"
+    elif command -v dnf &> /dev/null; then
+        echo "dnf"
+    elif command -v yum &> /dev/null; then
+        echo "yum"
+    elif command -v brew &> /dev/null; then
+        echo "brew"
+    elif command -v pacman &> /dev/null; then
+        echo "pacman"
+    elif command -v zypper &> /dev/null; then
+        echo "zypper"
+    else
+        echo "unknown"
+    fi
+}
+
+auto_install_dependency() {
+    local dep=$1
+    local pkg_manager=$(detect_package_manager)
+
+    if [[ "$pkg_manager" == "unknown" ]]; then
+        return 1
+    fi
+
+    echo
+    read -p "是否自动安装 $dep? (y/n): " -r
+
+    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+        return 1
+    fi
+
+    echo "正在安装 $dep..."
+
+    local install_cmd=""
+    case "$pkg_manager" in
+        apt)
+            install_cmd="sudo apt install -y $dep"
+            ;;
+        dnf)
+            install_cmd="sudo dnf install -y $dep"
+            ;;
+        yum)
+            install_cmd="sudo yum install -y $dep"
+            ;;
+        brew)
+            install_cmd="brew install $dep"
+            ;;
+        pacman)
+            install_cmd="sudo pacman -S --noconfirm $dep"
+            ;;
+        zypper)
+            install_cmd="sudo zypper install -y $dep"
+            ;;
+    esac
+
+    if eval "$install_cmd"; then
+        echo -e "${GREEN}✓ $dep 安装成功${RESET}"
+        return 0
+    else
+        echo -e "${RED}✗ $dep 安装失败${RESET}"
+        return 1
+    fi
+}
+
+# ============================================================
+# API 调用函数
+# ============================================================
+
+api_get_balance() {
+    local url="${API_BASE_URL}/api/v1/user/balance"
+
+    # 使用 curl 发送请求
+    local response=$(curl -s -w "\n%{http_code}" \
+        -X GET \
+        -H "accept: application/json" \
+        -H "X-API-Key: ${API_KEY}" \
+        --connect-timeout 10 \
+        --max-time 30 \
+        "$url" 2>&1)
+
+    if [[ $? -ne 0 ]]; then
+        echo -e "${RED}错误: 请求失败${RESET}" >&2
+        return 1
+    fi
+
+    # 分离响应体和状态码
+    local http_code=$(echo "$response" | tail -n1)
+    local body=$(echo "$response" | sed '$d')
+
+    if [[ "$http_code" == "401" ]]; then
+        # 返回特殊标记表示认证失败
+        echo "AUTH_ERROR_401"
+        return 2
+    fi
+
+    if [[ "$http_code" != "200" ]]; then
+        echo -e "${RED}获取余额失败: HTTP $http_code${RESET}" >&2
+        echo "响应内容: $body" >&2
+        return 1
+    fi
+
+    echo "$body"
+}
+
+# ============================================================
+# 显示余额信息
+# ============================================================
+
+display_balance_info() {
+    local data=$1
+
+    # 使用 jq 提取数据
+    local subscription_balance=$(echo "$data" | jq -r '.subscription_balance // 0')
+    local payg_balance=$(echo "$data" | jq -r '.pay_as_you_go_balance // 0')
+    local total_balance=$(echo "$data" | jq -r '.total_balance // 0')
+    local credit_balance=$(echo "$data" | jq -r '.credit_balance // 0')
+    local weekly_limit=$(echo "$data" | jq -r '.weekly_limit // 0')
+    local weekly_spent=$(echo "$data" | jq -r '.weekly_spent_balance // 0')
+
+    # 计算剩余额度和消费百分比
+    local weekly_remaining=$(echo "$weekly_limit - $weekly_spent" | bc)
+    if (( $(echo "$weekly_limit > 0" | bc -l) )); then
+        local spent_percent=$(echo "scale=1; ($weekly_spent / $weekly_limit) * 100" | bc)
+        local remaining_percent=$(echo "scale=1; 100 - $spent_percent" | bc)
+    else
+        local spent_percent=0
+        local remaining_percent=0
+    fi
+
+    # 显示余额信息
+    echo -e "${CYAN}${BOLD}💰 余额信息${RESET}"
+
+    if [[ "$subscription_balance" != "0" ]]; then
+        local color=$(get_balance_color "$subscription_balance")
+        echo -e "订阅余额：${color}¥$(printf "%.2f" $subscription_balance)${RESET}"
+    fi
+
+    if [[ "$payg_balance" != "0" ]]; then
+        local color=$(get_balance_color "$payg_balance")
+        echo -e "按需付费余额：${color}¥$(printf "%.2f" $payg_balance)${RESET}"
+    fi
+
+    if [[ "$total_balance" != "0" ]]; then
+        local color=$(get_balance_color "$total_balance")
+        echo -e "${WHITE}${BOLD}总余额：${RESET}${color}${BOLD}¥$(printf "%.2f" $total_balance)${RESET}"
+    fi
+
+    if (( $(echo "$credit_balance > 0" | bc -l) )); then
+        echo -e "信用额度：${MAGENTA}¥$(printf "%.2f" $credit_balance)${RESET}"
+    fi
+
+    # 显示消费信息
+    echo
+    echo -e "${CYAN}${BOLD}📊 本周消费${RESET}"
+
+    if (( $(echo "$weekly_limit > 0" | bc -l) )); then
+        echo -e "周限额：${CYAN}¥$(printf "%.2f" $weekly_limit)${RESET}"
+
+        local color=$(get_spending_color "$spent_percent")
+        echo -e "已消费：${color}¥$(printf "%.2f" $weekly_spent)${RESET} ${color}(${spent_percent}%)${RESET}"
+
+        local remaining_color=$(get_balance_color "$weekly_remaining")
+        echo -e "剩余额度：${remaining_color}¥$(printf "%.2f" $weekly_remaining)${RESET} ${remaining_color}(${remaining_percent}%)${RESET}"
+
+        echo -e "消费进度：$(create_progress_bar "$weekly_spent" "$weekly_limit")"
+    fi
+}
+
+# ============================================================
+# 命令处理
+# ============================================================
+
+cmd_balance() {
+    echo
+    echo "正在查询余额..."
+
+    local balance_data
+    local exit_code
+
+    # 临时禁用 set -e，允许捕获非零退出码
+    set +e
+    balance_data=$(api_get_balance)
+    exit_code=$?
+    set -e
+
+    # 如果是认证错误（401），提示用户重新输入 API Key
+    if [[ $exit_code -eq 2 && "$balance_data" == "AUTH_ERROR_401" ]]; then
+        echo -e "${RED}✗ API Key 无效（认证失败）${RESET}"
+        prompt_api_key false  # 不显示重复提示信息
+
+        # 重新加载配置
+        load_config
+
+        # 重试请求
+        echo "正在重新查询余额..."
+        set +e
+        balance_data=$(api_get_balance)
+        exit_code=$?
+        set -e
+    fi
+
+    # 检查最终结果
+    if [[ $exit_code -eq 0 && -n "$balance_data" && "$balance_data" != "AUTH_ERROR_401" ]]; then
+        echo -e "✓ 获取余额信息成功!\n"
+        display_balance_info "$balance_data"
+    else
+        echo -e "${RED}✗ 获取余额失败${RESET}"
+        exit 1
+    fi
+}
+
+cmd_uninstall() {
+    # 获取 yc 命令的实际路径
+    local yc_path=""
+
+    # 方法1：如果是通过安装的命令运行，使用 which 查找
+    if command -v yc &> /dev/null; then
+        yc_path=$(which yc)
+    fi
+
+    # 方法2：如果是直接运行脚本，使用 $0
+    if [[ -z "$yc_path" || "$yc_path" == *"/"* ]]; then
+        yc_path=$(realpath "$0" 2>/dev/null || readlink -f "$0" 2>/dev/null || echo "$0")
+    fi
+
+    # 检查是否有权限删除
+    if [[ ! -w "$yc_path" && ! -w "$(dirname "$yc_path")" ]]; then
+        echo -e "${RED}✗ 没有权限删除 $yc_path${RESET}"
+        echo "请使用 sudo 运行或手动删除"
+        exit 1
+    fi
+
+    # 询问是否删除配置文件
+    local delete_config=false
+    if [[ -f "$HOME/.yescode/config.json" ]]; then
+        echo
+        read -p "是否同时删除配置文件? (y/n): " -r
+        if [[ $REPLY =~ ^[Yy]$ ]]; then
+            delete_config=true
+        fi
+    fi
+
+    # 删除 yc 命令
+    if rm -f "$yc_path" 2>/dev/null; then
+        echo -e "${GREEN}✓ 已卸载 yc${RESET}"
+    else
+        echo -e "${RED}✗ 卸载失败${RESET}"
+        exit 1
+    fi
+
+    # 删除配置文件（如果用户选择）
+    if [[ "$delete_config" == true ]]; then
+        rm -rf "$HOME/.yescode" 2>/dev/null
+        echo -e "${GREEN}✓ 已删除配置文件${RESET}"
+    fi
+}
+
+cmd_install() {
+    # 检查依赖
+    local missing_deps=()
+
+    if ! command -v curl &> /dev/null; then
+        missing_deps+=("curl")
+    fi
+
+    if ! command -v jq &> /dev/null; then
+        missing_deps+=("jq")
+    fi
+
+    # 如果有缺失的依赖，尝试自动安装
+    if [ ${#missing_deps[@]} -gt 0 ]; then
+        echo -e "${YELLOW}⚠ 缺少依赖: ${missing_deps[*]}${RESET}"
+
+        local pkg_manager=$(detect_package_manager)
+
+        if [[ "$pkg_manager" != "unknown" ]]; then
+            # 尝试自动安装每个缺失的依赖
+            for dep in "${missing_deps[@]}"; do
+                if auto_install_dependency "$dep"; then
+                    # 安装成功，从缺失列表中移除
+                    missing_deps=("${missing_deps[@]/$dep}")
+                fi
+            done
+
+            # 过滤空元素
+            missing_deps=($(printf '%s\n' "${missing_deps[@]}" | grep -v '^$'))
+        fi
+
+        # 重新检查是否还有缺失
+        if [ ${#missing_deps[@]} -gt 0 ]; then
+            echo
+            echo -e "${YELLOW}⚠ 依赖仍然缺失: ${missing_deps[*]}${RESET}"
+            echo "请手动安装："
+            echo "  Ubuntu/Debian: sudo apt install ${missing_deps[*]}"
+            echo "  RHEL/CentOS: sudo yum install ${missing_deps[*]}"
+            echo "  Fedora: sudo dnf install ${missing_deps[*]}"
+            echo "  macOS: brew install ${missing_deps[*]}"
+            echo "  Arch Linux: sudo pacman -S ${missing_deps[*]}"
+            echo
+            read -p "是否继续安装? (y/n): " -r
+            if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+                echo "已取消"
+                exit 1
+            fi
+        fi
+    fi
+
+    # 获取当前脚本路径
+    local script_path=$(realpath "$0" 2>/dev/null || readlink -f "$0" 2>/dev/null || echo "$0")
+
+    # 确定安装目标目录
+    local install_dir=""
+    if [ -w "/usr/local/bin" ]; then
+        install_dir="/usr/local/bin"
+    elif [ -d "$HOME/.local/bin" ]; then
+        install_dir="$HOME/.local/bin"
+    else
+        install_dir="$HOME/.local/bin"
+        mkdir -p "$install_dir"
+    fi
+
+    # 检查是否已安装
+    local install_path="$install_dir/yc"
+    if [ -f "$install_path" ]; then
+        if [ "$script_path" = "$install_path" ]; then
+            echo -e "${CYAN}ℹ yc 已安装${RESET}"
+            return 0
+        fi
+    fi
+
+    # 安装脚本文件
+    if cp "$script_path" "$install_path" 2>/dev/null; then
+        chmod +x "$install_path"
+        echo -e "${GREEN}✓ 已安装到 $install_path${RESET}"
+    else
+        echo -e "${RED}✗ 安装失败，没有权限写入 $install_dir${RESET}"
+        echo "请使用 sudo 运行"
+        exit 1
+    fi
+
+    # 配置 API Key
+    local config_dir="$HOME/.yescode"
+    local config_file="$config_dir/config.json"
+
+    if [ ! -f "$config_file" ]; then
+        mkdir -p "$config_dir"
+        echo
+        read -p "配置 API Key: " api_key
+    fi
+
+    # 检查 PATH
+    if [[ ":$PATH:" != *":$install_dir:"* ]]; then
+        echo
+        echo -e "${YELLOW}⚠ $install_dir 不在 PATH 中${RESET}"
+        echo "请添加到 ~/.bashrc 或 ~/.zshrc:"
+        echo "  export PATH=\"\$HOME/.local/bin:\$PATH\""
+    fi
+}
+
+show_help() {
+    cat << EOF
+usage: yc [-h] {balance,install,uninstall}
+
+YesCode API 调用工具 - 查询余额等功能
+
+positional arguments:
+  balance     查询账户余额和订阅信息
+  install     安装 yc 命令到系统
+  uninstall   卸载 yc 命令
+
+options:
+  -h, --help  显示帮助信息
+
+使用示例:
+  yc balance                          # 查询余额
+  yc install                          # 安装 yc
+  yc uninstall                        # 卸载 yc
+  yc --help                           # 显示帮助信息
+EOF
+}
+
+# ============================================================
+# 主程序
+# ============================================================
+
+main() {
+    # 解析命令行参数
+    if [[ $# -eq 0 ]]; then
+        show_help
+        exit 1
+    fi
+
+    # 处理不需要依赖检查的命令
+    case "$1" in
+        -h|--help)
+            show_help
+            exit 0
+            ;;
+        install)
+            cmd_install
+            exit 0
+            ;;
+        uninstall)
+            cmd_uninstall
+            exit 0
+            ;;
+    esac
+
+    # 检查依赖（balance 等命令需要）
+    if ! command -v jq &> /dev/null; then
+        echo -e "${RED}错误: 未找到 jq 命令${RESET}"
+        echo "请安装 jq: apt install jq (Ubuntu/Debian) 或 brew install jq (macOS)"
+        exit 1
+    fi
+
+    if ! command -v curl &> /dev/null; then
+        echo -e "${RED}错误: 未找到 curl 命令${RESET}"
+        echo "请安装 curl: apt install curl (Ubuntu/Debian) 或 brew install curl (macOS)"
+        exit 1
+    fi
+
+    # 处理需要依赖的命令
+    case "$1" in
+        balance)
+            load_config
+            cmd_balance
+            ;;
+        *)
+            echo -e "${RED}错误: 未知命令 '$1'${RESET}"
+            echo
+            show_help
+            exit 1
+            ;;
+    esac
+}
+
+main "$@"
