@@ -580,38 +580,29 @@ display_provider_alternatives() {
     fi
 
     local original_name=$(echo "$original_item" | jq -r '.alternative.display_name')
-    local original_type=$(echo "$original_item" | jq -r '.alternative.type')
-    local original_id=$(echo "$original_item" | jq -r '.alternative.id')
 
     # 显示标题
-    echo -e "${CYAN}${BOLD}🔄 提供商替代方案${RESET}"
-    echo
-    echo -e "${WHITE}${BOLD}原提供商：${RESET}${original_name} ${BLUE}(${original_type}, ID: ${original_id})${RESET}"
+    echo -e "${CYAN}${BOLD}服务商 ${original_name} 可用服务方案：${RESET}"
     echo
 
-    # 提取替代方案（is_self = false）
-    local alternatives=$(echo "$data" | jq -r '[.data[] | select(.is_self == false)]')
-    local alternatives_count=$(echo "$alternatives" | jq '. | length')
+    # 遍历所有方案（包括原方案和替代方案）
+    for ((i=0; i<$data_count; i++)); do
+        local item=$(echo "$data" | jq -r ".data[$i]")
 
-    if [[ "$alternatives_count" == "0" ]]; then
-        echo -e "${YELLOW}暂无可用的替代方案${RESET}"
-        return
-    fi
+        local is_self=$(echo "$item" | jq -r '.is_self')
+        local provider_id=$(echo "$item" | jq -r '.alternative.id')
+        local display_name=$(echo "$item" | jq -r '.alternative.display_name')
+        local type=$(echo "$item" | jq -r '.alternative.type')
+        local rate=$(echo "$item" | jq -r '.alternative.rate_multiplier')
 
-    echo -e "${CYAN}${BOLD}可用替代方案 (${alternatives_count})：${RESET}"
-    echo
-
-    for ((i=0; i<$alternatives_count; i++)); do
-        local alt_data=$(echo "$alternatives" | jq -r ".[$i]")
-
-        local provider_id=$(echo "$alt_data" | jq -r '.alternative.id')
-        local display_name=$(echo "$alt_data" | jq -r '.alternative.display_name')
-        local type=$(echo "$alt_data" | jq -r '.alternative.type')
-        local rate=$(echo "$alt_data" | jq -r '.alternative.rate_multiplier')
-
-        # 显示替代方案信息
-        echo -e "$((i+1)). ID: ${BLUE}${provider_id}${RESET} | ${GREEN}${BOLD}${display_name}${RESET} | 费率: ${MAGENTA}×${rate}${RESET} | 类型: ${type}"
-        echo
+        # 根据是否为原方案添加不同的标记和颜色
+        if [[ "$is_self" == "true" ]]; then
+            # 原方案：在名称后添加[默认]标签
+            echo -e "  ID: ${BLUE}${provider_id}${RESET} | ${WHITE}${display_name}${RESET} ${GREEN}[默认]${RESET} | 费率: ${MAGENTA}×${rate}${RESET} | 类型: ${type}"
+        else
+            # 替代方案：普通显示
+            echo -e "  ID: ${BLUE}${provider_id}${RESET} | ${WHITE}${display_name}${RESET} | 费率: ${MAGENTA}×${rate}${RESET} | 类型: ${type}"
+        fi
     done
 }
 
