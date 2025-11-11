@@ -905,7 +905,7 @@ cmd_set_provider_selection() {
     local api_pid=$!
 
     # 显示 loading 动画
-    show_loading "正在设置生效的服务方案..." $api_pid
+    show_loading "正在切换服务方案..." $api_pid
 
     # 等待后台任务完成
     wait $api_pid
@@ -951,9 +951,8 @@ cmd_set_provider_selection() {
         local type=$(echo "$selected_alt" | jq -r '.type')
         local rate=$(echo "$selected_alt" | jq -r '.rate_multiplier')
 
-        echo -e "${WHITE}${BOLD}提供商 ID：${RESET}${BLUE}${provider_id}${RESET}"
-        echo -e "${WHITE}${BOLD}已切换到：${RESET}${display_name}"
-        echo -e "  ID: ${BLUE}${alt_id}${RESET}  |  类型: ${type}  |  费率: ${MAGENTA}×${rate}${RESET}"
+        echo -e "提供商 ${BLUE}${provider_id}${RESET} 服务方案已切换为：${WHITE}${BOLD}${display_name}${RESET}"
+        echo -e "ID: ${BLUE}${alt_id}${RESET} | 类型: ${type} | 费率: ${MAGENTA}×${rate}${RESET}"
         echo
     else
         echo -e "${RED}✗ 服务方案设置失败${RESET}"
