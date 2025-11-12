@@ -2066,16 +2066,7 @@ cmd_balance_preference() {
 # ============================================================
 
 cmd_interactive_menu() {
-    # 首次进入时清屏显示菜单
-    local first_run=true
-
     while true; do
-        # 只在首次运行或无效输入时清屏
-        if [[ "$first_run" == true ]]; then
-            clear
-            first_run=false
-        fi
-
         echo -e "${CYAN}${BOLD}📋 YesCode CLI 主菜单${RESET}"
         echo
         echo -e "  ${WHITE}${BOLD}[1]${RESET} 查询用户资料"
@@ -2127,8 +2118,6 @@ cmd_interactive_menu() {
                 ;;
             *)
                 echo -e "${RED}✗ 无效选项，请输入 1-8 或 q${RESET}"
-                sleep 1
-                clear
                 continue
                 ;;
         esac
