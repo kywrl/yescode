@@ -103,7 +103,7 @@ show_loading() {
 
     while kill -0 $pid 2>/dev/null; do
         i=$(( (i+1) % 10 ))
-        printf "\r${CYAN}${spin:$i:1}${RESET} %s" "$message"
+        printf "\r${CYAN}${spin:$i:1}${RESET}"
         sleep 0.1
     done
 
@@ -702,6 +702,166 @@ api_set_provider_selection() {
     echo "$body"
 }
 
+api_set_balance_preference() {
+    local balance_preference=$1
+
+    if [[ -z "$balance_preference" ]]; then
+        echo -e "${RED}错误: balance_preference 不能为空${RESET}" >&2
+        return 1
+    fi
+
+    # 验证参数值
+    if [[ "$balance_preference" != "subscription_first" && "$balance_preference" != "payg_only" ]]; then
+        echo -e "${RED}错误: balance_preference 只能是 'subscription_first' 或 'payg_only'${RESET}" >&2
+        return 1
+    fi
+
+    local url="${API_BASE_URL}/api/v1/user/balance-preference"
+    local method="PUT"
+    local json_data="{\"balance_preference\": \"${balance_preference}\"}"
+
+    # 根据 debug 模式选择不同的 curl 参数
+    local response
+    if [[ "$DEBUG" == "true" ]]; then
+        response=$(curl -s -i -w "\n%{http_code}" \
+            -X PUT \
+            -H "accept: application/json" \
+            -H "Content-Type: application/json" \
+            -H "X-API-Key: ${API_KEY}" \
+            -d "$json_data" \
+            --connect-timeout 10 \
+            --max-time 30 \
+            "$url" 2>&1)
+    else
+        response=$(curl -s -w "\n%{http_code}" \
+            -X PUT \
+            -H "accept: application/json" \
+            -H "Content-Type: application/json" \
+            -H "X-API-Key: ${API_KEY}" \
+            -d "$json_data" \
+            --connect-timeout 10 \
+            --max-time 30 \
+            "$url" 2>&1)
+    fi
+
+    if [[ $? -ne 0 ]]; then
+        echo -e "${RED}错误: 请求失败${RESET}" >&2
+        return 1
+    fi
+
+    # 分离响应体和状态码
+    local http_code=$(echo "$response" | tail -n1)
+    local full_response=$(echo "$response" | head -n -1)
+
+    # 在 debug 模式下分离响应头和响应体
+    local headers=""
+    local body=""
+    if [[ "$DEBUG" == "true" ]]; then
+        full_response=$(echo "$full_response" | tr -d '\r')
+        local empty_line=$(echo "$full_response" | grep -n "^$" | head -1 | cut -d: -f1)
+        if [[ -n "$empty_line" ]]; then
+            headers=$(echo "$full_response" | head -n $((empty_line - 1)))
+            body=$(echo "$full_response" | tail -n +$((empty_line + 1)))
+        else
+            body="$full_response"
+        fi
+    else
+        body="$full_response"
+    fi
+
+    # 处理认证错误
+    if [[ "$http_code" == "401" ]]; then
+        echo "AUTH_ERROR_401"
+        return 2
+    fi
+
+    # 处理其他错误
+    if [[ "$http_code" != "200" ]]; then
+        echo -e "${RED}设置余额使用偏好失败: HTTP $http_code${RESET}" >&2
+        echo "响应内容: $body" >&2
+        return 1
+    fi
+
+    # 显示原始响应（仅在 debug 模式）
+    if [[ "$DEBUG" == "true" ]]; then
+        local api_key_masked="${API_KEY:0:8}********"
+        display_raw_response "$method" "$url" "$api_key_masked" "$http_code" "$headers" "$body" "$json_data"
+    fi
+
+    echo "$body"
+}
+
+api_get_profile() {
+    local url="${API_BASE_URL}/api/v1/auth/profile"
+    local method="GET"
+
+    # 根据 debug 模式选择不同的 curl 参数
+    local response
+    if [[ "$DEBUG" == "true" ]]; then
+        response=$(curl -s -i -w "\n%{http_code}" \
+            -X GET \
+            -H "accept: application/json" \
+            -H "X-API-Key: ${API_KEY}" \
+            --connect-timeout 10 \
+            --max-time 30 \
+            "$url" 2>&1)
+    else
+        response=$(curl -s -w "\n%{http_code}" \
+            -X GET \
+            -H "accept: application/json" \
+            -H "X-API-Key: ${API_KEY}" \
+            --connect-timeout 10 \
+            --max-time 30 \
+            "$url" 2>&1)
+    fi
+
+    if [[ $? -ne 0 ]]; then
+        echo -e "${RED}错误: 请求失败${RESET}" >&2
+        return 1
+    fi
+
+    # 分离响应体和状态码
+    local http_code=$(echo "$response" | tail -n1)
+    local full_response=$(echo "$response" | head -n -1)
+
+    # 在 debug 模式下分离响应头和响应体
+    local headers=""
+    local body=""
+    if [[ "$DEBUG" == "true" ]]; then
+        full_response=$(echo "$full_response" | tr -d '\r')
+        local empty_line=$(echo "$full_response" | grep -n "^$" | head -1 | cut -d: -f1)
+        if [[ -n "$empty_line" ]]; then
+            headers=$(echo "$full_response" | head -n $((empty_line - 1)))
+            body=$(echo "$full_response" | tail -n +$((empty_line + 1)))
+        else
+            body="$full_response"
+        fi
+    else
+        body="$full_response"
+    fi
+
+    # 处理认证错误
+    if [[ "$http_code" == "401" ]]; then
+        echo "AUTH_ERROR_401"
+        return 2
+    fi
+
+    # 处理其他错误
+    if [[ "$http_code" != "200" ]]; then
+        echo -e "${RED}获取用户资料失败: HTTP $http_code${RESET}" >&2
+        echo "响应内容: $body" >&2
+        return 1
+    fi
+
+    # 显示原始响应（仅在 debug 模式）
+    if [[ "$DEBUG" == "true" ]]; then
+        local api_key_masked="${API_KEY:0:8}********"
+        display_raw_response "$method" "$url" "$api_key_masked" "$http_code" "$headers" "$body"
+    fi
+
+    echo "$body"
+}
+
 # ============================================================
 # 显示余额信息
 # ============================================================
@@ -732,21 +892,21 @@ display_balance_info() {
 
     if [[ "$subscription_balance" != "0" ]]; then
         local color=$(get_balance_color "$subscription_balance")
-        echo -e "订阅余额：${color}¥$(printf "%.2f" $subscription_balance)${RESET}"
+        echo -e "订阅余额：${color}\$$(printf "%.2f" $subscription_balance)${RESET}"
     fi
 
     if [[ "$payg_balance" != "0" ]]; then
         local color=$(get_balance_color "$payg_balance")
-        echo -e "按需付费余额：${color}¥$(printf "%.2f" $payg_balance)${RESET}"
+        echo -e "按需付费余额：${color}\$$(printf "%.2f" $payg_balance)${RESET}"
     fi
 
     if [[ "$total_balance" != "0" ]]; then
         local color=$(get_balance_color "$total_balance")
-        echo -e "${WHITE}${BOLD}总余额：${RESET}${color}${BOLD}¥$(printf "%.2f" $total_balance)${RESET}"
+        echo -e "${WHITE}${BOLD}总余额：${RESET}${color}${BOLD}\$$(printf "%.2f" $total_balance)${RESET}"
     fi
 
     if (( $(echo "$credit_balance > 0" | bc -l) )); then
-        echo -e "信用额度：${MAGENTA}¥$(printf "%.2f" $credit_balance)${RESET}"
+        echo -e "信用额度：${MAGENTA}\$$(printf "%.2f" $credit_balance)${RESET}"
     fi
 
     # 显示消费信息
@@ -754,13 +914,13 @@ display_balance_info() {
     echo -e "${CYAN}${BOLD}📊 本周消费${RESET}"
 
     if (( $(echo "$weekly_limit > 0" | bc -l) )); then
-        echo -e "周限额：${CYAN}¥$(printf "%.2f" $weekly_limit)${RESET}"
+        echo -e "周限额：${CYAN}\$$(printf "%.2f" $weekly_limit)${RESET}"
 
         local color=$(get_spending_color "$spent_percent")
-        echo -e "已消费：${color}¥$(printf "%.2f" $weekly_spent)${RESET} ${color}(${spent_percent}%)${RESET}"
+        echo -e "已消费：${color}\$$(printf "%.2f" $weekly_spent)${RESET} ${color}(${spent_percent}%)${RESET}"
 
         local remaining_color=$(get_balance_color "$weekly_remaining")
-        echo -e "剩余额度：${remaining_color}¥$(printf "%.2f" $weekly_remaining)${RESET} ${remaining_color}(${remaining_percent}%)${RESET}"
+        echo -e "剩余额度：${remaining_color}\$$(printf "%.2f" $weekly_remaining)${RESET} ${remaining_color}(${remaining_percent}%)${RESET}"
 
         echo -e "消费进度：$(create_progress_bar "$weekly_spent" "$weekly_limit")"
     fi
@@ -873,6 +1033,135 @@ display_provider_selection() {
     # 优化输出格式
     echo -e "分组 ${BLUE}${provider_id}${RESET} 当前生效的提供商："
     echo -e "ID: ${BLUE}${selected_alt_id}${RESET} | ${GREEN}${BOLD}${display_name}${RESET} | 费率: ${MAGENTA}×${rate}${RESET} | 类型: ${type}"
+}
+
+display_profile() {
+    local data=$1
+
+    # 提取用户资料信息
+    local email=$(echo "$data" | jq -r '.email // "N/A"')
+    local username=$(echo "$data" | jq -r '.username // "N/A"')
+
+    # 提取余额信息
+    local balance=$(echo "$data" | jq -r '.balance // "0"')
+    local subscription_balance=$(echo "$data" | jq -r '.subscription_balance // "0"')
+    local payg_balance=$(echo "$data" | jq -r '.pay_as_you_go_balance // "0"')
+    local balance_preference=$(echo "$data" | jq -r '.balance_preference // "N/A"')
+    local subscription_expiry=$(echo "$data" | jq -r '.subscription_expiry // "N/A"')
+
+    # 提取消费信息
+    local current_week_spend=$(echo "$data" | jq -r '.current_week_spend // "0"')
+    local current_month_spend=$(echo "$data" | jq -r '.current_month_spend // "0"')
+
+    # 提取订阅套餐信息
+    local plan_name=$(echo "$data" | jq -r '.subscription_plan.name // "N/A"')
+    local plan_price=$(echo "$data" | jq -r '.subscription_plan.price // "0"')
+    local plan_is_active=$(echo "$data" | jq -r '.subscription_plan.is_active // "false"')
+    local plan_daily_balance=$(echo "$data" | jq -r '.subscription_plan.daily_balance // "0"')
+    local plan_weekly_limit=$(echo "$data" | jq -r '.subscription_plan.weekly_limit // "0"')
+    local plan_monthly_limit=$(echo "$data" | jq -r '.subscription_plan.monthly_spend_limit // "0"')
+
+    # 显示用户资料
+    echo -e "${CYAN}${BOLD}👤 用户资料${RESET}"
+    if [[ "$username" != "N/A" ]]; then
+        echo -e "用户名：${WHITE}${BOLD}${username}${RESET}"
+    fi
+
+    if [[ "$email" != "N/A" ]]; then
+        echo -e "邮箱：${WHITE}${email}${RESET}"
+    fi
+
+    # 显示余额信息
+    echo
+    echo -e "${CYAN}${BOLD}💰 余额信息${RESET}"
+
+    if [[ "$subscription_balance" != "0" && "$subscription_balance" != "N/A" ]]; then
+        local color=$(get_balance_color "$subscription_balance")
+        echo -e "订阅余额：${color}\$$(printf "%.2f" $subscription_balance)${RESET}"
+    fi
+
+    if [[ "$payg_balance" != "0" && "$payg_balance" != "N/A" ]]; then
+        local color=$(get_balance_color "$payg_balance")
+        echo -e "按需付费余额：${color}\$$(printf "%.2f" $payg_balance)${RESET}"
+    fi
+
+    if [[ "$balance" != "0" && "$balance" != "N/A" ]]; then
+        local color=$(get_balance_color "$balance")
+        echo -e "总余额：${color}\$$(printf "%.2f" $balance)${RESET}"
+    fi
+
+    # 显示余额使用偏好
+    if [[ "$balance_preference" != "N/A" ]]; then
+        local preference_text=""
+        if [[ "$balance_preference" == "subscription_first" ]]; then
+            preference_text="${CYAN}优先订阅${RESET}"
+        elif [[ "$balance_preference" == "payg_only" ]]; then
+            preference_text="${YELLOW}仅按需付费${RESET}"
+        else
+            preference_text="${WHITE}${balance_preference}${RESET}"
+        fi
+        echo -e "余额使用偏好：${preference_text}"
+    fi
+
+    # 显示订阅套餐信息
+    if [[ "$plan_name" != "N/A" ]]; then
+        echo
+        echo -e "${CYAN}${BOLD}📦 订阅套餐${RESET}"
+
+        echo -e "套餐名称：${WHITE}${BOLD}${plan_name}${RESET}"
+
+        if [[ "$plan_price" != "0" && "$plan_price" != "N/A" ]]; then
+            echo -e "套餐价格：${GREEN}\$$(printf "%.2f" $plan_price)${RESET}"
+        fi
+
+        if [[ "$plan_is_active" == "true" ]]; then
+            echo -e "套餐状态：${GREEN}${BOLD}有效${RESET}"
+        else
+            echo -e "套餐状态：${RED}无效${RESET}"
+        fi
+
+        # 订阅到期时间（人类易读）
+        if [[ "$subscription_expiry" != "N/A" && "$subscription_expiry" != "null" ]]; then
+            # 尝试转换为人类易读格式
+            local expiry_readable=""
+            if command -v date &> /dev/null; then
+                expiry_readable=$(date -d "$subscription_expiry" "+%Y年%m月%d日 %H:%M" 2>/dev/null || echo "$subscription_expiry")
+            else
+                expiry_readable="$subscription_expiry"
+            fi
+            echo -e "订阅到期时间：${YELLOW}${expiry_readable}${RESET}"
+        fi
+
+        if [[ "$plan_daily_balance" != "0" && "$plan_daily_balance" != "N/A" ]]; then
+            echo -e "日消费限额：${CYAN}\$$(printf "%.2f" $plan_daily_balance)${RESET}"
+        fi
+
+        # 周消费限额（整合已消费和百分比）
+        if [[ "$plan_weekly_limit" != "0" && "$plan_weekly_limit" != "N/A" ]]; then
+            local output="周消费限额：${CYAN}\$$(printf "%.2f" $plan_weekly_limit)${RESET}"
+
+            if [[ "$current_week_spend" != "0" && "$current_week_spend" != "N/A" ]]; then
+                local week_percent=$(echo "scale=10; ($current_week_spend / $plan_weekly_limit) * 100" | bc)
+                local week_percent_formatted=$(printf "%.2f" $week_percent)
+                local week_color=$(get_spending_color "$week_percent")
+                output="${output} ${MAGENTA}(已消费\$$(printf "%.2f" $current_week_spend), ${week_color}${week_percent_formatted}%${RESET}${MAGENTA})${RESET}"
+            fi
+            echo -e "$output"
+        fi
+
+        # 月消费限额（整合已消费和百分比）
+        if [[ "$plan_monthly_limit" != "0" && "$plan_monthly_limit" != "N/A" ]]; then
+            local output="月消费限额：${CYAN}\$$(printf "%.2f" $plan_monthly_limit)${RESET}"
+
+            if [[ "$current_month_spend" != "0" && "$current_month_spend" != "N/A" ]]; then
+                local month_percent=$(echo "scale=10; ($current_month_spend / $plan_monthly_limit) * 100" | bc)
+                local month_percent_formatted=$(printf "%.2f" $month_percent)
+                local month_color=$(get_spending_color "$month_percent")
+                output="${output} ${MAGENTA}(已消费\$$(printf "%.2f" $current_month_spend), ${month_color}${month_percent_formatted}%${RESET}${MAGENTA})${RESET}"
+            fi
+            echo -e "$output"
+        fi
+    fi
 }
 
 # ============================================================
@@ -1107,6 +1396,65 @@ cmd_balance() {
         echo
     else
         echo -e "${RED}✗ 获取余额失败${RESET}"
+        exit 1
+    fi
+}
+
+cmd_profile() {
+    local profile_data
+    local exit_code
+    local temp_file=$(mktemp)
+
+    # 临时禁用 set -e，允许捕获非零退出码
+    set +e
+
+    # 在后台执行 API 调用
+    (api_get_profile > "$temp_file"; echo $? > "${temp_file}.exit") &
+    local api_pid=$!
+
+    # 显示 loading 动画
+    show_loading "正在查询用户资料..." $api_pid
+
+    # 等待后台任务完成
+    wait $api_pid
+
+    # 读取结果
+    profile_data=$(cat "$temp_file")
+    exit_code=$(cat "${temp_file}.exit")
+
+    # 清理临时文件
+    rm -f "$temp_file" "${temp_file}.exit"
+
+    set -e
+
+    # 如果是认证错误（401），提示用户重新输入 API Key
+    if [[ $exit_code -eq 2 && "$profile_data" == "AUTH_ERROR_401" ]]; then
+        echo -e "${RED}✗ API Key 无效（认证失败）${RESET}"
+        prompt_api_key false
+
+        # 重新加载配置
+        load_config
+
+        # 重试请求（带loading）
+        set +e
+        temp_file=$(mktemp)
+        (api_get_profile > "$temp_file"; echo $? > "${temp_file}.exit") &
+        api_pid=$!
+        show_loading "正在重新查询用户资料..." $api_pid
+        wait $api_pid
+        profile_data=$(cat "$temp_file")
+        exit_code=$(cat "${temp_file}.exit")
+        rm -f "$temp_file" "${temp_file}.exit"
+        set -e
+    fi
+
+    # 检查最终结果
+    if [[ $exit_code -eq 0 && -n "$profile_data" && "$profile_data" != "AUTH_ERROR_401" ]]; then
+        echo
+        display_profile "$profile_data"
+        echo
+    else
+        echo -e "${RED}✗ 获取用户资料失败${RESET}"
         exit 1
     fi
 }
@@ -1543,6 +1891,118 @@ cmd_switch() {
     fi
 }
 
+cmd_balance_preference() {
+    local preference=$1
+
+    # 如果没有提供参数，则进入交互式选择
+    if [[ -z "$preference" ]]; then
+        echo
+        echo -e "${CYAN}${BOLD}💳 选择余额使用偏好：${RESET}"
+        echo
+        echo -e "  ${WHITE}${BOLD}[1]${RESET} 优先订阅 (subscription_first)"
+        echo -e "      ${WHITE}先使用订阅余额，然后使用按需付费${RESET}"
+        echo -e "      ${YELLOW}⚠ OPUS使用限制适用${RESET}"
+        echo
+        echo -e "  ${WHITE}${BOLD}[2]${RESET} 仅按需付费 (payg_only)"
+        echo -e "      ${WHITE}始终使用按需付费余额${RESET}"
+        echo -e "      ${GREEN}✓ 无OPUS使用限制${RESET}"
+        echo
+
+        # 获取用户输入
+        while true; do
+            read -p "请输入选项 [1-2] (输入 q 退出): " choice
+
+            # 支持退出
+            if [[ "$choice" == "q" || "$choice" == "Q" ]]; then
+                echo -e "${YELLOW}已取消操作${RESET}"
+                exit 0
+            fi
+
+            # 验证输入
+            case "$choice" in
+                1)
+                    preference="subscription_first"
+                    break
+                    ;;
+                2)
+                    preference="payg_only"
+                    break
+                    ;;
+                *)
+                    echo -e "${RED}错误: 请输入 1 或 2${RESET}"
+                    continue
+                    ;;
+            esac
+        done
+    else
+        # 验证直接提供的参数
+        if [[ "$preference" != "subscription_first" && "$preference" != "payg_only" ]]; then
+            echo -e "${RED}错误: preference 必须是 'subscription_first' 或 'payg_only'${RESET}"
+            echo "用法: yc balance-preference [subscription_first|payg_only]"
+            exit 1
+        fi
+    fi
+
+    # 执行设置
+    local result_data
+    local exit_code
+    local temp_file=$(mktemp)
+
+    set +e
+    (api_set_balance_preference "$preference" > "$temp_file"; echo $? > "${temp_file}.exit") &
+    local api_pid=$!
+    show_loading "正在设置余额使用偏好..." $api_pid
+    wait $api_pid
+    result_data=$(cat "$temp_file")
+    exit_code=$(cat "${temp_file}.exit")
+    rm -f "$temp_file" "${temp_file}.exit"
+    set -e
+
+    # 处理认证错误
+    if [[ $exit_code -eq 2 && "$result_data" == "AUTH_ERROR_401" ]]; then
+        echo -e "${RED}✗ API Key 无效（401 认证失败）${RESET}"
+        prompt_api_key false
+        load_config
+
+        # 重试
+        temp_file=$(mktemp)
+        set +e
+        (api_set_balance_preference "$preference" > "$temp_file"; echo $? > "${temp_file}.exit") &
+        api_pid=$!
+        show_loading "正在重新设置余额使用偏好..." $api_pid
+        wait $api_pid
+        result_data=$(cat "$temp_file")
+        exit_code=$(cat "${temp_file}.exit")
+        rm -f "$temp_file" "${temp_file}.exit"
+        set -e
+    fi
+
+    # 检查设置结果
+    if [[ $exit_code -eq 0 && -n "$result_data" && "$result_data" != "AUTH_ERROR_401" ]]; then
+        echo
+        echo -e "${GREEN}${BOLD}✓ 余额使用偏好设置成功！${RESET}"
+        echo
+
+        # 显示设置的偏好
+        local preference_text=""
+        local preference_desc=""
+        if [[ "$preference" == "subscription_first" ]]; then
+            preference_text="${CYAN}优先订阅${RESET}"
+            preference_desc="先使用订阅余额，然后使用按需付费 ${YELLOW}(OPUS使用限制适用)${RESET}"
+        else
+            preference_text="${YELLOW}仅按需付费${RESET}"
+            preference_desc="始终使用按需付费余额 ${GREEN}(无OPUS使用限制)${RESET}"
+        fi
+
+        echo -e "当前余额使用偏好：${WHITE}${BOLD}${preference_text}${RESET}"
+        echo -e "${preference_desc}"
+        echo
+    else
+        echo -e "${RED}✗ 设置余额使用偏好失败${RESET}"
+        exit 1
+    fi
+}
+
 cmd_uninstall() {
     # 检测是否从项目目录运行（./yc 或相对路径）
     if [[ "$0" == ./* || "$0" == */* ]] && command -v yc &> /dev/null; then
@@ -1725,36 +2185,43 @@ cmd_install() {
 
 show_help() {
     cat << EOF
-usage: yc [-h] [-d] {balance,providers,provider-alternatives,provider-selection,set-provider-selection,switch,install,uninstall}
+usage: yc [-h] [-d] {balance,profile,providers,provider-alternatives,provider-selection,set-provider-selection,switch,balance-preference,install,uninstall}
 
 YesCode API 调用工具 - 查询余额、分组等功能
 
 positional arguments:
-  balance                              查询账户余额和订阅信息
-  providers                            查询可用的 AI 分组
-  provider-alternatives <id>           查询指定分组提供的所有可用提供商
-  provider-selection <id>              查询指定分组当前生效的提供商
-  set-provider-selection <id> <alt>    设置指定分组的生效提供商
-  switch [id]                          交互式切换提供商 (推荐使用)
-  install                              安装 yc 命令到系统
-  uninstall                            卸载 yc 命令
+  balance                                查询账户余额和订阅信息
+  profile                                查询用户资料信息
+  providers                              查询可用的 AI 分组
+  provider-alternatives <id>             查询指定分组提供的所有可用提供商
+  provider-selection <id>                查询指定分组当前生效的提供商
+  set-provider-selection <id> <alt>      设置指定分组的生效提供商
+  switch [id]                            交互式切换提供商 (推荐使用)
+  balance-preference [preference]        设置余额使用偏好 (推荐使用)
+                                         参数: subscription_first | payg_only
+  install                                安装 yc 命令到系统
+  uninstall                              卸载 yc 命令
 
 options:
   -h, --help     显示帮助信息
   -d, --debug    显示调试信息（包括请求头、响应头、完整 JSON 等）
 
 使用示例:
-  yc balance                          # 查询余额
-  yc -d balance                       # 查询余额（显示调试信息）
-  yc --debug providers                # 查询分组（显示调试信息）
-  yc provider-alternatives 5          # 查询分组 5 的所有可用提供商
-  yc provider-selection 5             # 查询分组 5 的当前提供商
-  yc set-provider-selection 5 12      # 设置分组 5 的提供商为 12
-  yc switch                           # 交互式切换提供商
-  yc switch 5                         # 切换分组 5 的提供商
-  yc install                          # 安装 yc
-  yc uninstall                        # 卸载 yc
-  yc --help                           # 显示帮助信息
+  yc balance                            # 查询余额
+  yc profile                            # 查询用户资料
+  yc -d balance                         # 查询余额（显示调试信息）
+  yc --debug providers                  # 查询分组（显示调试信息）
+  yc provider-alternatives 5            # 查询分组 5 的所有可用提供商
+  yc provider-selection 5               # 查询分组 5 的当前提供商
+  yc set-provider-selection 5 12        # 设置分组 5 的提供商为 12
+  yc switch                             # 交互式切换提供商
+  yc switch 5                           # 切换分组 5 的提供商
+  yc balance-preference                 # 交互式选择余额使用偏好
+  yc balance-preference subscription_first  # 设置为优先订阅模式
+  yc balance-preference payg_only       # 设置为仅按需付费模式
+  yc install                            # 安装 yc
+  yc uninstall                          # 卸载 yc
+  yc --help                             # 显示帮助信息
 EOF
 }
 
@@ -1821,6 +2288,10 @@ main() {
             load_config
             cmd_balance
             ;;
+        profile)
+            load_config
+            cmd_profile
+            ;;
         providers)
             load_config
             cmd_providers
@@ -1840,6 +2311,10 @@ main() {
         switch)
             load_config
             cmd_switch "$2"
+            ;;
+        balance-preference)
+            load_config
+            cmd_balance_preference "$2"
             ;;
         *)
             echo -e "${RED}错误: 未知命令 '$1'${RESET}"
