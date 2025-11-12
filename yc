@@ -2242,43 +2242,32 @@ cmd_install() {
 
 show_help() {
     cat << EOF
-usage: yc [-h] [-d] {balance,profile,providers,provider-alternatives,provider-selection,set-provider-selection,switch,balance-preference,install,uninstall}
+usage: yc [-h] [-d] <command> [args...]
 
-YesCode API 调用工具 - 查询余额、分组等功能
+YesCode API CLI 工具
 
-positional arguments:
-  balance                                查询账户余额和订阅信息
-  profile                                查询用户资料信息
-  providers                              查询可用的 AI 分组
-  provider-alternatives <id>             查询指定分组提供的所有可用提供商
-  provider-selection <id>                查询指定分组当前生效的提供商
-  set-provider-selection <id> <alt>      设置指定分组的生效提供商
-  switch [id]                            交互式切换提供商 (推荐使用)
-  balance-preference [preference]        设置余额使用偏好 (推荐使用)
-                                         参数: subscription_first | payg_only
-  install                                安装 yc 命令到系统
-  uninstall                              卸载 yc 命令
+主要命令:
+  profile                           查询用户资料
+  balance                           仅查询余额信息
+  balance-preference [preference]   设置余额使用偏好 ★
+                                      preference: subscription_first | payg_only
+  switch [id]                       交互式切换提供商 ★
+                                      id: 分组 ID（可选，留空则交互式选择）
 
-options:
-  -h, --help     显示帮助信息
-  -d, --debug    显示调试信息（包括请求头、响应头、完整 JSON 等）
+其他命令:
+  install                           安装 yc 到系统
+  uninstall                         卸载 yc
+  providers                         查询提供商分组
+  provider-alternatives <id>        查询指定分组的所有可用提供商
+                                      id: 分组 ID
+  provider-selection <id>           查询指定分组当前生效的提供商
+                                      id: 分组 ID
+  set-provider-selection <id> <alt> 设置指定分组的生效提供商
+                                      id: 分组 ID, alt: 提供商 ID
 
-使用示例:
-  yc balance                            # 查询余额
-  yc profile                            # 查询用户资料
-  yc -d balance                         # 查询余额（显示调试信息）
-  yc --debug providers                  # 查询分组（显示调试信息）
-  yc provider-alternatives 5            # 查询分组 5 的所有可用提供商
-  yc provider-selection 5               # 查询分组 5 的当前提供商
-  yc set-provider-selection 5 12        # 设置分组 5 的提供商为 12
-  yc switch                             # 交互式切换提供商
-  yc switch 5                           # 切换分组 5 的提供商
-  yc balance-preference                 # 交互式选择余额使用偏好
-  yc balance-preference subscription_first  # 设置为优先订阅模式
-  yc balance-preference payg_only       # 设置为仅按需付费模式
-  yc install                            # 安装 yc
-  yc uninstall                          # 卸载 yc
-  yc --help                             # 显示帮助信息
+选项:
+  -h, --help                        显示帮助信息
+  -d, --debug                       显示调试信息（请求/响应详情）
 EOF
 }
 
