@@ -87,8 +87,7 @@ load_config() {
 # ============================================================
 
 show_loading() {
-    local message="$1"
-    local pid=$2
+    local pid=$1
     local spin='⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏'
     local i=0
 
@@ -1354,7 +1353,7 @@ cmd_balance() {
     local api_pid=$!
 
     # 显示 loading 动画
-    show_loading "正在查询余额..." $api_pid
+    show_loading $api_pid
 
     # 等待后台任务完成
     wait $api_pid
@@ -1381,7 +1380,7 @@ cmd_balance() {
         temp_file=$(mktemp)
         (api_get_balance > "$temp_file"; echo $? > "${temp_file}.exit") &
         api_pid=$!
-        show_loading "正在重新查询余额..." $api_pid
+        show_loading $api_pid
         wait $api_pid
         balance_data=$(cat "$temp_file")
         exit_code=$(cat "${temp_file}.exit")
@@ -1413,7 +1412,7 @@ cmd_profile() {
     local api_pid=$!
 
     # 显示 loading 动画
-    show_loading "正在查询用户资料..." $api_pid
+    show_loading $api_pid
 
     # 等待后台任务完成
     wait $api_pid
@@ -1440,7 +1439,7 @@ cmd_profile() {
         temp_file=$(mktemp)
         (api_get_profile > "$temp_file"; echo $? > "${temp_file}.exit") &
         api_pid=$!
-        show_loading "正在重新查询用户资料..." $api_pid
+        show_loading $api_pid
         wait $api_pid
         profile_data=$(cat "$temp_file")
         exit_code=$(cat "${temp_file}.exit")
@@ -1472,7 +1471,7 @@ cmd_providers() {
     local api_pid=$!
 
     # 显示 loading 动画
-    show_loading "正在查询分组..." $api_pid
+    show_loading $api_pid
 
     # 等待后台任务完成
     wait $api_pid
@@ -1499,7 +1498,7 @@ cmd_providers() {
         temp_file=$(mktemp)
         (api_get_providers > "$temp_file"; echo $? > "${temp_file}.exit") &
         api_pid=$!
-        show_loading "正在重新查询分组..." $api_pid
+        show_loading $api_pid
         wait $api_pid
         providers_data=$(cat "$temp_file")
         exit_code=$(cat "${temp_file}.exit")
@@ -1539,7 +1538,7 @@ cmd_provider_alternatives() {
     local api_pid=$!
 
     # 显示 loading 动画
-    show_loading "正在查询可用提供商..." $api_pid
+    show_loading $api_pid
 
     # 等待后台任务完成
     wait $api_pid
@@ -1566,7 +1565,7 @@ cmd_provider_alternatives() {
         temp_file=$(mktemp)
         (api_get_provider_alternatives "$provider_id" > "$temp_file"; echo $? > "${temp_file}.exit") &
         api_pid=$!
-        show_loading "正在重新查询可用提供商..." $api_pid
+        show_loading $api_pid
         wait $api_pid
         alternatives_data=$(cat "$temp_file")
         exit_code=$(cat "${temp_file}.exit")
@@ -1606,7 +1605,7 @@ cmd_provider_selection() {
     local api_pid=$!
 
     # 显示 loading 动画
-    show_loading "正在查询当前生效的提供商..." $api_pid
+    show_loading $api_pid
 
     # 等待后台任务完成
     wait $api_pid
@@ -1633,7 +1632,7 @@ cmd_provider_selection() {
         temp_file=$(mktemp)
         (api_get_provider_selection "$provider_id" > "$temp_file"; echo $? > "${temp_file}.exit") &
         api_pid=$!
-        show_loading "正在重新查询当前生效的提供商..." $api_pid
+        show_loading $api_pid
         wait $api_pid
         selection_data=$(cat "$temp_file")
         exit_code=$(cat "${temp_file}.exit")
@@ -1680,7 +1679,7 @@ cmd_set_provider_selection() {
     local api_pid=$!
 
     # 显示 loading 动画
-    show_loading "正在切换提供商..." $api_pid
+    show_loading $api_pid
 
     # 等待后台任务完成
     wait $api_pid
@@ -1707,7 +1706,7 @@ cmd_set_provider_selection() {
         temp_file=$(mktemp)
         (api_set_provider_selection "$provider_id" "$selected_alternative_id" > "$temp_file"; echo $? > "${temp_file}.exit") &
         api_pid=$!
-        show_loading "正在重新设置生效的提供商..." $api_pid
+        show_loading $api_pid
         wait $api_pid
         result_data=$(cat "$temp_file")
         exit_code=$(cat "${temp_file}.exit")
@@ -1751,7 +1750,7 @@ cmd_switch() {
         set +e
         (api_get_providers > "$temp_file"; echo $? > "${temp_file}.exit") &
         local api_pid=$!
-        show_loading "正在加载分组列表..." $api_pid
+        show_loading $api_pid
         wait $api_pid
         providers_data=$(cat "$temp_file")
         exit_code=$(cat "${temp_file}.exit")
@@ -1769,7 +1768,7 @@ cmd_switch() {
             set +e
             (api_get_providers > "$temp_file"; echo $? > "${temp_file}.exit") &
             api_pid=$!
-            show_loading "正在重新加载分组列表..." $api_pid
+            show_loading $api_pid
             wait $api_pid
             providers_data=$(cat "$temp_file")
             exit_code=$(cat "${temp_file}.exit")
@@ -1801,7 +1800,7 @@ cmd_switch() {
         set +e
         (api_get_providers > "$temp_file"; echo $? > "${temp_file}.exit") &
         local api_pid=$!
-        show_loading "正在查询分组信息..." $api_pid
+        show_loading $api_pid
         wait $api_pid
         providers_data=$(cat "$temp_file")
         exit_code=$(cat "${temp_file}.exit")
@@ -1830,7 +1829,7 @@ cmd_switch() {
     local pid_selection=$!
 
     # 显示 loading 动画
-    show_loading "正在加载提供商列表..." $pid_alternatives
+    show_loading $pid_alternatives
 
     # 等待两个 API 调用完成
     wait $pid_alternatives
@@ -1866,7 +1865,7 @@ cmd_switch() {
     set +e
     (api_set_provider_selection "$provider_id" "$selected_alt_id" > "$temp_file"; echo $? > "${temp_file}.exit") &
     local api_pid=$!
-    show_loading "正在切换提供商..." $api_pid
+    show_loading $api_pid
     wait $api_pid
     result_data=$(cat "$temp_file")
     exit_code=$(cat "${temp_file}.exit")
@@ -1896,14 +1895,66 @@ cmd_balance_preference() {
 
     # 如果没有提供参数，则进入交互式选择
     if [[ -z "$preference" ]]; then
+        # 获取当前余额偏好设置
+        local profile_data
+        local exit_code
+        local temp_file=$(mktemp)
+
+        set +e
+        (api_get_profile > "$temp_file"; echo $? > "${temp_file}.exit") &
+        local api_pid=$!
+        show_loading $api_pid
+        wait $api_pid
+        profile_data=$(cat "$temp_file")
+        exit_code=$(cat "${temp_file}.exit")
+        rm -f "$temp_file" "${temp_file}.exit"
+        set -e
+
+        # 处理认证错误
+        if [[ $exit_code -eq 2 && "$profile_data" == "AUTH_ERROR_401" ]]; then
+            echo -e "${RED}✗ API Key 无效（认证失败）${RESET}"
+            prompt_api_key false
+            load_config
+
+            # 重试
+            temp_file=$(mktemp)
+            set +e
+            (api_get_profile > "$temp_file"; echo $? > "${temp_file}.exit") &
+            api_pid=$!
+            show_loading $api_pid
+            wait $api_pid
+            profile_data=$(cat "$temp_file")
+            exit_code=$(cat "${temp_file}.exit")
+            rm -f "$temp_file" "${temp_file}.exit"
+            set -e
+        fi
+
+        # 提取当前余额偏好
+        local current_preference="N/A"
+        if [[ $exit_code -eq 0 && -n "$profile_data" && "$profile_data" != "AUTH_ERROR_401" ]]; then
+            current_preference=$(echo "$profile_data" | jq -r '.balance_preference // "N/A"')
+        fi
+
         echo
         echo -e "${CYAN}${BOLD}💳 选择余额使用偏好：${RESET}"
         echo
-        echo -e "  ${WHITE}${BOLD}[1]${RESET} 优先订阅 (subscription_first)"
+
+        # 显示选项1（优先订阅）
+        local option1_prefix=""
+        if [[ "$current_preference" == "subscription_first" ]]; then
+            option1_prefix="${GREEN}${BOLD}[当前]${RESET} "
+        fi
+        echo -e "  ${WHITE}${BOLD}[1]${RESET} ${option1_prefix}优先订阅 (subscription_first)"
         echo -e "      ${WHITE}先使用订阅余额，然后使用按需付费${RESET}"
         echo -e "      ${YELLOW}⚠ OPUS使用限制适用${RESET}"
         echo
-        echo -e "  ${WHITE}${BOLD}[2]${RESET} 仅按需付费 (payg_only)"
+
+        # 显示选项2（仅按需付费）
+        local option2_prefix=""
+        if [[ "$current_preference" == "payg_only" ]]; then
+            option2_prefix="${GREEN}${BOLD}[当前]${RESET} "
+        fi
+        echo -e "  ${WHITE}${BOLD}[2]${RESET} ${option2_prefix}仅按需付费 (payg_only)"
         echo -e "      ${WHITE}始终使用按需付费余额${RESET}"
         echo -e "      ${GREEN}✓ 无OPUS使用限制${RESET}"
         echo
@@ -1934,6 +1985,12 @@ cmd_balance_preference() {
                     ;;
             esac
         done
+
+        # 检查是否选择了当前选项
+        if [[ "$preference" == "$current_preference" ]]; then
+            echo -e "${YELLOW}⚠ 已经是当前设置，无需切换${RESET}"
+            exit 0
+        fi
     else
         # 验证直接提供的参数
         if [[ "$preference" != "subscription_first" && "$preference" != "payg_only" ]]; then
@@ -1951,7 +2008,7 @@ cmd_balance_preference() {
     set +e
     (api_set_balance_preference "$preference" > "$temp_file"; echo $? > "${temp_file}.exit") &
     local api_pid=$!
-    show_loading "正在设置余额使用偏好..." $api_pid
+    show_loading $api_pid
     wait $api_pid
     result_data=$(cat "$temp_file")
     exit_code=$(cat "${temp_file}.exit")
@@ -1969,7 +2026,7 @@ cmd_balance_preference() {
         set +e
         (api_set_balance_preference "$preference" > "$temp_file"; echo $? > "${temp_file}.exit") &
         api_pid=$!
-        show_loading "正在重新设置余额使用偏好..." $api_pid
+        show_loading $api_pid
         wait $api_pid
         result_data=$(cat "$temp_file")
         exit_code=$(cat "${temp_file}.exit")
