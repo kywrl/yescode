@@ -16,6 +16,7 @@ BLUE='\033[0;34m'
 MAGENTA='\033[0;35m'
 CYAN='\033[0;36m'
 WHITE='\033[0;37m'
+GRAY='\033[0;90m'
 BOLD='\033[1m'
 RESET='\033[0m'
 
@@ -2065,8 +2066,16 @@ cmd_balance_preference() {
 # ============================================================
 
 cmd_interactive_menu() {
+    # 首次进入时清屏显示菜单
+    local first_run=true
+
     while true; do
-        clear
+        # 只在首次运行或无效输入时清屏
+        if [[ "$first_run" == true ]]; then
+            clear
+            first_run=false
+        fi
+
         echo -e "${CYAN}${BOLD}📋 YesCode CLI 主菜单${RESET}"
         echo
         echo -e "  ${WHITE}${BOLD}[1]${RESET} 查询用户资料"
@@ -2119,6 +2128,7 @@ cmd_interactive_menu() {
             *)
                 echo -e "${RED}✗ 无效选项，请输入 1-8 或 q${RESET}"
                 sleep 1
+                clear
                 continue
                 ;;
         esac
@@ -2132,6 +2142,11 @@ cmd_interactive_menu() {
                 break
             fi
         done
+
+        # 添加分隔线，保留之前的输出
+        echo
+        echo -e "${GRAY}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${RESET}"
+        echo
     done
 }
 
