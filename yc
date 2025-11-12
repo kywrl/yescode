@@ -92,6 +92,12 @@ show_loading() {
     local spin='⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏'
     local i=0
 
+    # debug 模式下不显示动画，直接等待
+    if [[ "$DEBUG" == "true" ]]; then
+        wait $pid
+        return
+    fi
+
     # 隐藏光标
     tput civis
 
@@ -106,6 +112,78 @@ show_loading() {
 
     # 恢复光标
     tput cnorm
+}
+
+# ============================================================
+# Debug 模式显示函数
+# ============================================================
+
+display_raw_response() {
+    # 只在 debug 模式下显示
+    if [[ "$DEBUG" != "true" ]]; then
+        return
+    fi
+
+    local method="$1"
+    local url="$2"
+    local api_key_masked="$3"
+    local http_code="$4"
+    local headers="$5"
+    local body="$6"
+    local request_body="$7"  # 可选的请求体
+
+    # 所有输出重定向到 stderr，避免污染 API 函数的返回值
+    {
+        echo
+        echo -e "${BOLD}════════════════════════ 原始 HTTP 请求/响应 ════════════════════════${RESET}"
+        echo
+        echo -e "${CYAN}${BOLD}📤 请求信息${RESET}"
+        echo -e "  方法: ${YELLOW}${method}${RESET}"
+        echo -e "  URL: ${BLUE}${url}${RESET}"
+        echo -e "  请求头:"
+        echo -e "    ${WHITE}accept: application/json${RESET}"
+        echo -e "    ${WHITE}X-API-Key: ${api_key_masked}${RESET}"
+        if [[ "$method" == "PUT" || "$method" == "POST" ]]; then
+            echo -e "    ${WHITE}Content-Type: application/json${RESET}"
+        fi
+
+        # 显示请求体（如果有）
+        if [[ -n "$request_body" ]]; then
+            echo
+            echo -e "${CYAN}${BOLD}📄 请求体（JSON）:${RESET}"
+            if command -v jq &> /dev/null; then
+                echo "$request_body" | jq -C . 2>/dev/null || echo "$request_body"
+            else
+                echo "$request_body"
+            fi
+        fi
+        echo
+        echo -e "${CYAN}${BOLD}📥 响应信息${RESET}"
+        echo -e "  状态码: ${GREEN}${http_code}${RESET}"
+
+        if [[ -n "$headers" && "$headers" != "null" ]]; then
+            echo -e "  响应头:"
+            echo "$headers" | while IFS= read -r line; do
+                if [[ -n "$line" ]]; then
+                    echo -e "    ${WHITE}${line}${RESET}"
+                fi
+            done
+        fi
+
+        echo
+        echo -e "${CYAN}${BOLD}📄 响应体（JSON）:${RESET}"
+
+        # 使用 jq 格式化 JSON（带颜色）
+        if command -v jq &> /dev/null; then
+            echo "$body" | jq -C . 2>/dev/null || echo "$body"
+        else
+            echo "$body"
+        fi
+
+        echo
+        echo -e "${BOLD}═══════════════════════════════════════════════════════════════${RESET}"
+        echo
+    } >&2
 }
 
 # ============================================================
@@ -234,15 +312,29 @@ auto_install_dependency() {
 
 api_get_balance() {
     local url="${API_BASE_URL}/api/v1/user/balance"
+    local method="GET"
 
-    # 使用 curl 发送请求
-    local response=$(curl -s -w "\n%{http_code}" \
-        -X GET \
-        -H "accept: application/json" \
-        -H "X-API-Key: ${API_KEY}" \
-        --connect-timeout 10 \
-        --max-time 30 \
-        "$url" 2>&1)
+    # 根据 debug 模式选择不同的 curl 参数
+    local response
+    if [[ "$DEBUG" == "true" ]]; then
+        # debug 模式：获取响应头
+        response=$(curl -s -i -w "\n%{http_code}" \
+            -X GET \
+            -H "accept: application/json" \
+            -H "X-API-Key: ${API_KEY}" \
+            --connect-timeout 10 \
+            --max-time 30 \
+            "$url" 2>&1)
+    else
+        # 普通模式：不获取响应头
+        response=$(curl -s -w "\n%{http_code}" \
+            -X GET \
+            -H "accept: application/json" \
+            -H "X-API-Key: ${API_KEY}" \
+            --connect-timeout 10 \
+            --max-time 30 \
+            "$url" 2>&1)
+    fi
 
     if [[ $? -ne 0 ]]; then
         echo -e "${RED}错误: 请求失败${RESET}" >&2
@@ -251,18 +343,44 @@ api_get_balance() {
 
     # 分离响应体和状态码
     local http_code=$(echo "$response" | tail -n1)
-    local body=$(echo "$response" | sed '$d')
+    local full_response=$(echo "$response" | head -n -1)
 
+    # 在 debug 模式下分离响应头和响应体
+    local headers=""
+    local body=""
+    if [[ "$DEBUG" == "true" ]]; then
+        # 删除回车符（HTTP 响应使用 CRLF）
+        full_response=$(echo "$full_response" | tr -d '\r')
+        # 查找空行位置（响应头和响应体的分隔）
+        local empty_line=$(echo "$full_response" | grep -n "^$" | head -1 | cut -d: -f1)
+        if [[ -n "$empty_line" ]]; then
+            headers=$(echo "$full_response" | head -n $((empty_line - 1)))
+            body=$(echo "$full_response" | tail -n +$((empty_line + 1)))
+        else
+            # 如果没有找到空行，可能响应格式异常，全部作为 body
+            body="$full_response"
+        fi
+    else
+        body="$full_response"
+    fi
+
+    # 处理认证错误
     if [[ "$http_code" == "401" ]]; then
-        # 返回特殊标记表示认证失败
         echo "AUTH_ERROR_401"
         return 2
     fi
 
+    # 处理其他错误
     if [[ "$http_code" != "200" ]]; then
         echo -e "${RED}获取余额失败: HTTP $http_code${RESET}" >&2
         echo "响应内容: $body" >&2
         return 1
+    fi
+
+    # 显示原始响应（仅在 debug 模式）
+    if [[ "$DEBUG" == "true" ]]; then
+        local api_key_masked="${API_KEY:0:8}********"
+        display_raw_response "$method" "$url" "$api_key_masked" "$http_code" "$headers" "$body"
     fi
 
     echo "$body"
@@ -270,15 +388,27 @@ api_get_balance() {
 
 api_get_providers() {
     local url="${API_BASE_URL}/api/v1/user/available-providers"
+    local method="GET"
 
-    # 使用 curl 发送请求
-    local response=$(curl -s -w "\n%{http_code}" \
-        -X GET \
-        -H "accept: application/json" \
-        -H "X-API-Key: ${API_KEY}" \
-        --connect-timeout 10 \
-        --max-time 30 \
-        "$url" 2>&1)
+    # 根据 debug 模式选择不同的 curl 参数
+    local response
+    if [[ "$DEBUG" == "true" ]]; then
+        response=$(curl -s -i -w "\n%{http_code}" \
+            -X GET \
+            -H "accept: application/json" \
+            -H "X-API-Key: ${API_KEY}" \
+            --connect-timeout 10 \
+            --max-time 30 \
+            "$url" 2>&1)
+    else
+        response=$(curl -s -w "\n%{http_code}" \
+            -X GET \
+            -H "accept: application/json" \
+            -H "X-API-Key: ${API_KEY}" \
+            --connect-timeout 10 \
+            --max-time 30 \
+            "$url" 2>&1)
+    fi
 
     if [[ $? -ne 0 ]]; then
         echo -e "${RED}错误: 请求失败${RESET}" >&2
@@ -287,18 +417,41 @@ api_get_providers() {
 
     # 分离响应体和状态码
     local http_code=$(echo "$response" | tail -n1)
-    local body=$(echo "$response" | sed '$d')
+    local full_response=$(echo "$response" | head -n -1)
 
+    # 在 debug 模式下分离响应头和响应体
+    local headers=""
+    local body=""
+    if [[ "$DEBUG" == "true" ]]; then
+        full_response=$(echo "$full_response" | tr -d '\r')
+        local empty_line=$(echo "$full_response" | grep -n "^$" | head -1 | cut -d: -f1)
+        if [[ -n "$empty_line" ]]; then
+            headers=$(echo "$full_response" | head -n $((empty_line - 1)))
+            body=$(echo "$full_response" | tail -n +$((empty_line + 1)))
+        else
+            body="$full_response"
+        fi
+    else
+        body="$full_response"
+    fi
+
+    # 处理认证错误
     if [[ "$http_code" == "401" ]]; then
-        # 返回特殊标记表示认证失败
         echo "AUTH_ERROR_401"
         return 2
     fi
 
+    # 处理其他错误
     if [[ "$http_code" != "200" ]]; then
         echo -e "${RED}获取分组信息失败: HTTP $http_code${RESET}" >&2
         echo "响应内容: $body" >&2
         return 1
+    fi
+
+    # 显示原始响应（仅在 debug 模式）
+    if [[ "$DEBUG" == "true" ]]; then
+        local api_key_masked="${API_KEY:0:8}********"
+        display_raw_response "$method" "$url" "$api_key_masked" "$http_code" "$headers" "$body"
     fi
 
     echo "$body"
@@ -312,17 +465,28 @@ api_get_provider_alternatives() {
         return 1
     fi
 
-    # 获取指定分组提供的所有可用提供商（包括原方案和替代方案）
     local url="${API_BASE_URL}/api/v1/user/provider-alternatives/${provider_id}"
+    local method="GET"
 
-    # 使用 curl 发送请求
-    local response=$(curl -s -w "\n%{http_code}" \
-        -X GET \
-        -H "accept: application/json" \
-        -H "X-API-Key: ${API_KEY}" \
-        --connect-timeout 10 \
-        --max-time 30 \
-        "$url" 2>&1)
+    # 根据 debug 模式选择不同的 curl 参数
+    local response
+    if [[ "$DEBUG" == "true" ]]; then
+        response=$(curl -s -i -w "\n%{http_code}" \
+            -X GET \
+            -H "accept: application/json" \
+            -H "X-API-Key: ${API_KEY}" \
+            --connect-timeout 10 \
+            --max-time 30 \
+            "$url" 2>&1)
+    else
+        response=$(curl -s -w "\n%{http_code}" \
+            -X GET \
+            -H "accept: application/json" \
+            -H "X-API-Key: ${API_KEY}" \
+            --connect-timeout 10 \
+            --max-time 30 \
+            "$url" 2>&1)
+    fi
 
     if [[ $? -ne 0 ]]; then
         echo -e "${RED}错误: 请求失败${RESET}" >&2
@@ -331,18 +495,41 @@ api_get_provider_alternatives() {
 
     # 分离响应体和状态码
     local http_code=$(echo "$response" | tail -n1)
-    local body=$(echo "$response" | sed '$d')
+    local full_response=$(echo "$response" | head -n -1)
 
+    # 在 debug 模式下分离响应头和响应体
+    local headers=""
+    local body=""
+    if [[ "$DEBUG" == "true" ]]; then
+        full_response=$(echo "$full_response" | tr -d '\r')
+        local empty_line=$(echo "$full_response" | grep -n "^$" | head -1 | cut -d: -f1)
+        if [[ -n "$empty_line" ]]; then
+            headers=$(echo "$full_response" | head -n $((empty_line - 1)))
+            body=$(echo "$full_response" | tail -n +$((empty_line + 1)))
+        else
+            body="$full_response"
+        fi
+    else
+        body="$full_response"
+    fi
+
+    # 处理认证错误
     if [[ "$http_code" == "401" ]]; then
-        # 返回特殊标记表示认证失败
         echo "AUTH_ERROR_401"
         return 2
     fi
 
+    # 处理其他错误
     if [[ "$http_code" != "200" ]]; then
         echo -e "${RED}获取分组失败: HTTP $http_code${RESET}" >&2
         echo "响应内容: $body" >&2
         return 1
+    fi
+
+    # 显示原始响应（仅在 debug 模式）
+    if [[ "$DEBUG" == "true" ]]; then
+        local api_key_masked="${API_KEY:0:8}********"
+        display_raw_response "$method" "$url" "$api_key_masked" "$http_code" "$headers" "$body"
     fi
 
     echo "$body"
@@ -356,17 +543,28 @@ api_get_provider_selection() {
         return 1
     fi
 
-    # 获取指定分组当前生效的提供商
     local url="${API_BASE_URL}/api/v1/user/provider-alternatives/${provider_id}/selection"
+    local method="GET"
 
-    # 使用 curl 发送请求
-    local response=$(curl -s -w "\n%{http_code}" \
-        -X GET \
-        -H "accept: application/json" \
-        -H "X-API-Key: ${API_KEY}" \
-        --connect-timeout 10 \
-        --max-time 30 \
-        "$url" 2>&1)
+    # 根据 debug 模式选择不同的 curl 参数
+    local response
+    if [[ "$DEBUG" == "true" ]]; then
+        response=$(curl -s -i -w "\n%{http_code}" \
+            -X GET \
+            -H "accept: application/json" \
+            -H "X-API-Key: ${API_KEY}" \
+            --connect-timeout 10 \
+            --max-time 30 \
+            "$url" 2>&1)
+    else
+        response=$(curl -s -w "\n%{http_code}" \
+            -X GET \
+            -H "accept: application/json" \
+            -H "X-API-Key: ${API_KEY}" \
+            --connect-timeout 10 \
+            --max-time 30 \
+            "$url" 2>&1)
+    fi
 
     if [[ $? -ne 0 ]]; then
         echo -e "${RED}错误: 请求失败${RESET}" >&2
@@ -375,18 +573,41 @@ api_get_provider_selection() {
 
     # 分离响应体和状态码
     local http_code=$(echo "$response" | tail -n1)
-    local body=$(echo "$response" | sed '$d')
+    local full_response=$(echo "$response" | head -n -1)
 
+    # 在 debug 模式下分离响应头和响应体
+    local headers=""
+    local body=""
+    if [[ "$DEBUG" == "true" ]]; then
+        full_response=$(echo "$full_response" | tr -d '\r')
+        local empty_line=$(echo "$full_response" | grep -n "^$" | head -1 | cut -d: -f1)
+        if [[ -n "$empty_line" ]]; then
+            headers=$(echo "$full_response" | head -n $((empty_line - 1)))
+            body=$(echo "$full_response" | tail -n +$((empty_line + 1)))
+        else
+            body="$full_response"
+        fi
+    else
+        body="$full_response"
+    fi
+
+    # 处理认证错误
     if [[ "$http_code" == "401" ]]; then
-        # 返回特殊标记表示认证失败
         echo "AUTH_ERROR_401"
         return 2
     fi
 
+    # 处理其他错误
     if [[ "$http_code" != "200" ]]; then
         echo -e "${RED}获取当前选择失败: HTTP $http_code${RESET}" >&2
         echo "响应内容: $body" >&2
         return 1
+    fi
+
+    # 显示原始响应（仅在 debug 模式）
+    if [[ "$DEBUG" == "true" ]]; then
+        local api_key_masked="${API_KEY:0:8}********"
+        display_raw_response "$method" "$url" "$api_key_masked" "$http_code" "$headers" "$body"
     fi
 
     echo "$body"
@@ -406,23 +627,33 @@ api_set_provider_selection() {
         return 1
     fi
 
-    # 设置指定分组的生效提供商
-    # 参数: provider_id - 分组ID, selected_alternative_id - 要设置的提供商ID
     local url="${API_BASE_URL}/api/v1/user/provider-alternatives/${provider_id}/selection"
-
-    # 构造 JSON 请求体
+    local method="PUT"
     local json_data="{\"selected_alternative_id\": ${selected_alternative_id}}"
 
-    # 使用 curl 发送 PUT 请求
-    local response=$(curl -s -w "\n%{http_code}" \
-        -X PUT \
-        -H "accept: application/json" \
-        -H "Content-Type: application/json" \
-        -H "X-API-Key: ${API_KEY}" \
-        -d "$json_data" \
-        --connect-timeout 10 \
-        --max-time 30 \
-        "$url" 2>&1)
+    # 根据 debug 模式选择不同的 curl 参数
+    local response
+    if [[ "$DEBUG" == "true" ]]; then
+        response=$(curl -s -i -w "\n%{http_code}" \
+            -X PUT \
+            -H "accept: application/json" \
+            -H "Content-Type: application/json" \
+            -H "X-API-Key: ${API_KEY}" \
+            -d "$json_data" \
+            --connect-timeout 10 \
+            --max-time 30 \
+            "$url" 2>&1)
+    else
+        response=$(curl -s -w "\n%{http_code}" \
+            -X PUT \
+            -H "accept: application/json" \
+            -H "Content-Type: application/json" \
+            -H "X-API-Key: ${API_KEY}" \
+            -d "$json_data" \
+            --connect-timeout 10 \
+            --max-time 30 \
+            "$url" 2>&1)
+    fi
 
     if [[ $? -ne 0 ]]; then
         echo -e "${RED}错误: 请求失败${RESET}" >&2
@@ -431,18 +662,41 @@ api_set_provider_selection() {
 
     # 分离响应体和状态码
     local http_code=$(echo "$response" | tail -n1)
-    local body=$(echo "$response" | sed '$d')
+    local full_response=$(echo "$response" | head -n -1)
 
+    # 在 debug 模式下分离响应头和响应体
+    local headers=""
+    local body=""
+    if [[ "$DEBUG" == "true" ]]; then
+        full_response=$(echo "$full_response" | tr -d '\r')
+        local empty_line=$(echo "$full_response" | grep -n "^$" | head -1 | cut -d: -f1)
+        if [[ -n "$empty_line" ]]; then
+            headers=$(echo "$full_response" | head -n $((empty_line - 1)))
+            body=$(echo "$full_response" | tail -n +$((empty_line + 1)))
+        else
+            body="$full_response"
+        fi
+    else
+        body="$full_response"
+    fi
+
+    # 处理认证错误
     if [[ "$http_code" == "401" ]]; then
-        # 返回特殊标记表示认证失败
         echo "AUTH_ERROR_401"
         return 2
     fi
 
+    # 处理其他错误
     if [[ "$http_code" != "200" ]]; then
         echo -e "${RED}设置选择失败: HTTP $http_code${RESET}" >&2
         echo "响应内容: $body" >&2
         return 1
+    fi
+
+    # 显示原始响应（仅在 debug 模式）
+    if [[ "$DEBUG" == "true" ]]; then
+        local api_key_masked="${API_KEY:0:8}********"
+        display_raw_response "$method" "$url" "$api_key_masked" "$http_code" "$headers" "$body" "$json_data"
     fi
 
     echo "$body"
@@ -806,8 +1060,8 @@ cmd_balance() {
     # 临时禁用 set -e，允许捕获非零退出码
     set +e
 
-    # 在后台执行 API 调用
-    (api_get_balance > "$temp_file" 2>&1; echo $? > "${temp_file}.exit") &
+    # 在后台执行 API 调用（不重定向 stderr，让 verbose 输出直接显示）
+    (api_get_balance > "$temp_file"; echo $? > "${temp_file}.exit") &
     local api_pid=$!
 
     # 显示 loading 动画
@@ -836,7 +1090,7 @@ cmd_balance() {
         # 重试请求（带loading）
         set +e
         temp_file=$(mktemp)
-        (api_get_balance > "$temp_file" 2>&1; echo $? > "${temp_file}.exit") &
+        (api_get_balance > "$temp_file"; echo $? > "${temp_file}.exit") &
         api_pid=$!
         show_loading "正在重新查询余额..." $api_pid
         wait $api_pid
@@ -866,7 +1120,7 @@ cmd_providers() {
     set +e
 
     # 在后台执行 API 调用
-    (api_get_providers > "$temp_file" 2>&1; echo $? > "${temp_file}.exit") &
+    (api_get_providers > "$temp_file"; echo $? > "${temp_file}.exit") &
     local api_pid=$!
 
     # 显示 loading 动画
@@ -895,7 +1149,7 @@ cmd_providers() {
         # 重试请求（带loading）
         set +e
         temp_file=$(mktemp)
-        (api_get_providers > "$temp_file" 2>&1; echo $? > "${temp_file}.exit") &
+        (api_get_providers > "$temp_file"; echo $? > "${temp_file}.exit") &
         api_pid=$!
         show_loading "正在重新查询分组..." $api_pid
         wait $api_pid
@@ -933,7 +1187,7 @@ cmd_provider_alternatives() {
     set +e
 
     # 在后台执行 API 调用
-    (api_get_provider_alternatives "$provider_id" > "$temp_file" 2>&1; echo $? > "${temp_file}.exit") &
+    (api_get_provider_alternatives "$provider_id" > "$temp_file"; echo $? > "${temp_file}.exit") &
     local api_pid=$!
 
     # 显示 loading 动画
@@ -962,7 +1216,7 @@ cmd_provider_alternatives() {
         # 重试请求（带loading）
         set +e
         temp_file=$(mktemp)
-        (api_get_provider_alternatives "$provider_id" > "$temp_file" 2>&1; echo $? > "${temp_file}.exit") &
+        (api_get_provider_alternatives "$provider_id" > "$temp_file"; echo $? > "${temp_file}.exit") &
         api_pid=$!
         show_loading "正在重新查询可用提供商..." $api_pid
         wait $api_pid
@@ -1000,7 +1254,7 @@ cmd_provider_selection() {
     set +e
 
     # 在后台执行 API 调用
-    (api_get_provider_selection "$provider_id" > "$temp_file" 2>&1; echo $? > "${temp_file}.exit") &
+    (api_get_provider_selection "$provider_id" > "$temp_file"; echo $? > "${temp_file}.exit") &
     local api_pid=$!
 
     # 显示 loading 动画
@@ -1029,7 +1283,7 @@ cmd_provider_selection() {
         # 重试请求（带loading）
         set +e
         temp_file=$(mktemp)
-        (api_get_provider_selection "$provider_id" > "$temp_file" 2>&1; echo $? > "${temp_file}.exit") &
+        (api_get_provider_selection "$provider_id" > "$temp_file"; echo $? > "${temp_file}.exit") &
         api_pid=$!
         show_loading "正在重新查询当前生效的提供商..." $api_pid
         wait $api_pid
@@ -1074,7 +1328,7 @@ cmd_set_provider_selection() {
     set +e
 
     # 在后台执行 API 调用
-    (api_set_provider_selection "$provider_id" "$selected_alternative_id" > "$temp_file" 2>&1; echo $? > "${temp_file}.exit") &
+    (api_set_provider_selection "$provider_id" "$selected_alternative_id" > "$temp_file"; echo $? > "${temp_file}.exit") &
     local api_pid=$!
 
     # 显示 loading 动画
@@ -1103,7 +1357,7 @@ cmd_set_provider_selection() {
         # 重试请求（带loading）
         set +e
         temp_file=$(mktemp)
-        (api_set_provider_selection "$provider_id" "$selected_alternative_id" > "$temp_file" 2>&1; echo $? > "${temp_file}.exit") &
+        (api_set_provider_selection "$provider_id" "$selected_alternative_id" > "$temp_file"; echo $? > "${temp_file}.exit") &
         api_pid=$!
         show_loading "正在重新设置生效的提供商..." $api_pid
         wait $api_pid
@@ -1147,7 +1401,7 @@ cmd_switch() {
         # 获取所有分组
         temp_file=$(mktemp)
         set +e
-        (api_get_providers > "$temp_file" 2>&1; echo $? > "${temp_file}.exit") &
+        (api_get_providers > "$temp_file"; echo $? > "${temp_file}.exit") &
         local api_pid=$!
         show_loading "正在加载分组列表..." $api_pid
         wait $api_pid
@@ -1165,7 +1419,7 @@ cmd_switch() {
             # 重试
             temp_file=$(mktemp)
             set +e
-            (api_get_providers > "$temp_file" 2>&1; echo $? > "${temp_file}.exit") &
+            (api_get_providers > "$temp_file"; echo $? > "${temp_file}.exit") &
             api_pid=$!
             show_loading "正在重新加载分组列表..." $api_pid
             wait $api_pid
@@ -1197,7 +1451,7 @@ cmd_switch() {
         # 如果直接指定了 provider_id，需要查询分组名称
         temp_file=$(mktemp)
         set +e
-        (api_get_providers > "$temp_file" 2>&1; echo $? > "${temp_file}.exit") &
+        (api_get_providers > "$temp_file"; echo $? > "${temp_file}.exit") &
         local api_pid=$!
         show_loading "正在查询分组信息..." $api_pid
         wait $api_pid
@@ -1222,9 +1476,9 @@ cmd_switch() {
     local temp_selection=$(mktemp)
 
     set +e
-    (api_get_provider_alternatives "$provider_id" > "$temp_alternatives" 2>&1; echo $? > "${temp_alternatives}.exit") &
+    (api_get_provider_alternatives "$provider_id" > "$temp_alternatives"; echo $? > "${temp_alternatives}.exit") &
     local pid_alternatives=$!
-    (api_get_provider_selection "$provider_id" > "$temp_selection" 2>&1; echo $? > "${temp_selection}.exit") &
+    (api_get_provider_selection "$provider_id" > "$temp_selection"; echo $? > "${temp_selection}.exit") &
     local pid_selection=$!
 
     # 显示 loading 动画
@@ -1262,7 +1516,7 @@ cmd_switch() {
     local result_data
     temp_file=$(mktemp)
     set +e
-    (api_set_provider_selection "$provider_id" "$selected_alt_id" > "$temp_file" 2>&1; echo $? > "${temp_file}.exit") &
+    (api_set_provider_selection "$provider_id" "$selected_alt_id" > "$temp_file"; echo $? > "${temp_file}.exit") &
     local api_pid=$!
     show_loading "正在切换提供商..." $api_pid
     wait $api_pid
@@ -1471,7 +1725,7 @@ cmd_install() {
 
 show_help() {
     cat << EOF
-usage: yc [-h] {balance,providers,provider-alternatives,provider-selection,set-provider-selection,switch,install,uninstall}
+usage: yc [-h] [-d] {balance,providers,provider-alternatives,provider-selection,set-provider-selection,switch,install,uninstall}
 
 YesCode API 调用工具 - 查询余额、分组等功能
 
@@ -1486,11 +1740,13 @@ positional arguments:
   uninstall                            卸载 yc 命令
 
 options:
-  -h, --help  显示帮助信息
+  -h, --help     显示帮助信息
+  -d, --debug    显示调试信息（包括请求头、响应头、完整 JSON 等）
 
 使用示例:
   yc balance                          # 查询余额
-  yc providers                        # 查询分组
+  yc -d balance                       # 查询余额（显示调试信息）
+  yc --debug providers                # 查询分组（显示调试信息）
   yc provider-alternatives 5          # 查询分组 5 的所有可用提供商
   yc provider-selection 5             # 查询分组 5 的当前提供商
   yc set-provider-selection 5 12      # 设置分组 5 的提供商为 12
@@ -1507,6 +1763,23 @@ EOF
 # ============================================================
 
 main() {
+    # 全局 debug 标志
+    DEBUG=false
+
+    # 解析全局选项
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            -d|--debug)
+                DEBUG=true
+                shift
+                ;;
+            *)
+                # 遇到非选项参数，结束循环
+                break
+                ;;
+        esac
+    done
+
     # 解析命令行参数
     if [[ $# -eq 0 ]]; then
         show_help
