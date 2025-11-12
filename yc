@@ -2060,6 +2060,81 @@ cmd_balance_preference() {
     fi
 }
 
+# ============================================================
+# 交互式菜单
+# ============================================================
+
+cmd_interactive_menu() {
+    while true; do
+        clear
+        echo -e "${CYAN}${BOLD}📋 YesCode CLI 主菜单${RESET}"
+        echo
+        echo -e "  ${WHITE}${BOLD}[1]${RESET} 查询用户资料"
+        echo -e "  ${WHITE}${BOLD}[2]${RESET} 查询余额信息"
+        echo -e "  ${WHITE}${BOLD}[3]${RESET} 交互式切换提供商"
+        echo -e "  ${WHITE}${BOLD}[4]${RESET} 设置余额使用偏好"
+        echo -e "  ${WHITE}${BOLD}[5]${RESET} 查询提供商分组"
+        echo -e "  ${WHITE}${BOLD}[6]${RESET} 安装到系统"
+        echo -e "  ${WHITE}${BOLD}[7]${RESET} 从系统卸载"
+        echo -e "  ${WHITE}${BOLD}[8]${RESET} 显示完整帮助"
+        echo -e "  ${WHITE}${BOLD}[q]${RESET} 退出"
+        echo
+
+        read -p "请输入选项 [1-8/q]: " choice
+        echo
+
+        case "$choice" in
+            1)
+                cmd_profile
+                ;;
+            2)
+                cmd_balance
+                ;;
+            3)
+                cmd_switch ""
+                ;;
+            4)
+                cmd_balance_preference ""
+                ;;
+            5)
+                cmd_providers
+                ;;
+            6)
+                cmd_install
+                # install 命令会直接退出，不会返回
+                exit 0
+                ;;
+            7)
+                cmd_uninstall
+                # uninstall 命令会直接退出，不会返回
+                exit 0
+                ;;
+            8)
+                show_help
+                ;;
+            q|Q)
+                echo -e "${GREEN}再见！${RESET}"
+                exit 0
+                ;;
+            *)
+                echo -e "${RED}✗ 无效选项，请输入 1-8 或 q${RESET}"
+                sleep 1
+                continue
+                ;;
+        esac
+
+        # 命令执行完毕后，等待用户按 Esc 返回菜单
+        echo
+        echo -e "${CYAN}按 Esc 返回主菜单...${RESET}"
+        while true; do
+            read -rsn1 key
+            if [[ $key == $'\e' ]]; then
+                break
+            fi
+        done
+    done
+}
+
 cmd_uninstall() {
     # 检测是否从项目目录运行（./yc 或相对路径）
     if [[ "$0" == ./* || "$0" == */* ]] && command -v yc &> /dev/null; then
@@ -2242,11 +2317,15 @@ cmd_install() {
 
 show_help() {
     cat << EOF
-usage: yc [-h] [-d] <command> [args...]
+usage: yc [-h] [-d] [command] [args...]
 
 YesCode API CLI 工具
 
+说明:
+  无参数运行 'yc' 将进入交互式菜单模式 ★
+
 主要命令:
+  menu                              显示交互式菜单 ★
   profile                           查询用户资料
   balance                           仅查询余额信息
   balance-preference [preference]   设置余额使用偏好 ★
@@ -2295,8 +2374,9 @@ main() {
 
     # 解析命令行参数
     if [[ $# -eq 0 ]]; then
-        show_help
-        exit 1
+        load_config
+        cmd_interactive_menu
+        exit 0
     fi
 
     # 处理不需要依赖检查的命令
@@ -2361,6 +2441,10 @@ main() {
         balance-preference)
             load_config
             cmd_balance_preference "$2"
+            ;;
+        menu)
+            load_config
+            cmd_interactive_menu
             ;;
         *)
             echo -e "${RED}错误: 未知命令 '$1'${RESET}"
